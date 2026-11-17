@@ -37,7 +37,7 @@ let package = Package(
         // Pin the keyboard-support fork used by the terminal interface.
         .package(url: "https://github.com/DandyLyons/SwiftTUI.git", revision: "6f2c5fdba0039e8cf63a2317062013bff0732927"),
         // SQLite.swift - shared with iOS app
-        .package(url: "https://github.com/stephencelis/SQLite.swift", from: "0.15.3")
+        .package(url: "https://github.com/stephencelis/SQLite.swift", from: "0.17.0")
     ],
     targets: [
         .testTarget(

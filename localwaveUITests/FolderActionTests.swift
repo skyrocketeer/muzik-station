@@ -143,6 +143,28 @@ final class FolderActionTests: XCTestCase {
         XCTAssertTrue(app.buttons["Actions for Folder Test Track.wav"].exists)
     }
 
+    func testAddMusicPickersOpen() {
+        let app = XCUIApplication()
+        app.launchEnvironment["LOCALWAVE_UI_TEST_ID"] = UUID().uuidString
+        app.launchEnvironment["LOCALWAVE_REFERENCE_FIXTURE"] = "1"
+        app.launchEnvironment["LOCALWAVE_REFERENCE_SCREEN"] = "add"
+        app.launch()
+        defer { app.terminate() }
+        let folder = app.buttons.containing(.staticText, identifier: "A folder").firstMatch
+        XCTAssertTrue(folder.waitForExistence(timeout: 20))
+        folder.tap()
+        let cancel = app.buttons["Cancel"].firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10), "Folder picker should open")
+        cancel.tap()
+        let add = app.buttons["Add music"].firstMatch
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        add.tap()
+        let files = app.buttons.containing(.staticText, identifier: "Some files").firstMatch
+        XCTAssertTrue(files.waitForExistence(timeout: 10))
+        files.tap()
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10), "Audio picker should open")
+    }
+
     func testFilesVisualGeometry() {
         let app = XCUIApplication()
         app.launchEnvironment["LOCALWAVE_UI_TEST_ID"] = UUID().uuidString

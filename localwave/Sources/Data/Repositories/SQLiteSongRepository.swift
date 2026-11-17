@@ -14,6 +14,10 @@ public actor SQLiteSongRepository: SongRepository {
         try db.run(songsTable.filter(colId == songId).update(colSourceAvailability <- availability.rawValue))
     }
 
+    public func updateLyrics(songId: Int64, lyrics: String?) async throws {
+        try db.run(songsTable.filter(colId == songId).update(colLyrics <- lyrics))
+    }
+
     public func updateSourceLocation(songId: Int64, sourceId: Int64, relativePath: String) async throws {
         let unlinked = colSourceId == nil || (colSourceId == sourceId && colRelativePath == nil)
         try db.run(songsTable.filter(colId == songId && unlinked).update(colSourceId <- sourceId, colRelativePath <- relativePath))
@@ -27,6 +31,7 @@ public actor SQLiteSongRepository: SongRepository {
 
     // Typed columns
     private let colSourceAvailability = SQLite.Expression<String?>("sourceAvailability")
+    private let colLyrics = SQLite.Expression<String?>("lyrics")
     private let colDuration = SQLite.Expression<Double?>("duration")
     private let colFileSize = SQLite.Expression<Int64?>("fileSize")
     private let colFileExtension = SQLite.Expression<String?>("fileExtension")
@@ -58,7 +63,9 @@ public actor SQLiteSongRepository: SongRepository {
     // MARK: - FTS table
 
     private let ftsSongsTable = Table("songs_fts")
+    private let playlistSongsTable = Table("playlist_songs")
     private let colFtsSongId = SQLite.Expression<Int64>("songId")
+    private let colPlaylistSongId = SQLite.Expression<Int64>("songId")
     private let colFtsArtist = SQLite.Expression<String>("artist")
     private let colFtsTitle = SQLite.Expression<String>("title")
     private let colFtsAlbum = SQLite.Expression<String>("album")
@@ -135,6 +142,7 @@ public actor SQLiteSongRepository: SongRepository {
                 t.column(colSourceId)
                 t.column(colRelativePath)
                 t.column(colSourceAvailability)
+                t.column(colLyrics)
                 t.column(colDuration)
                 t.column(colFileSize)
                 t.column(colFileExtension)
@@ -158,7 +166,8 @@ public actor SQLiteSongRepository: SongRepository {
                 ("fileExtension", "TEXT"),
                 ("sampleRate", "REAL"),
                 ("bitDepth", "INTEGER"),
-                ("sourceAvailability", "TEXT")
+                ("sourceAvailability", "TEXT"),
+                ("lyrics", "TEXT")
             ] where !columns.contains(name) {
                 try db.execute("ALTER TABLE songs ADD COLUMN \(name) \(definition)")
             }
@@ -209,7 +218,8 @@ public actor SQLiteSongRepository: SongRepository {
                 fileExtension: row[colFileExtension],
                 sampleRate: row[colSampleRate],
                 bitDepth: row[colBitDepth],
-                sourceAvailability: row[colSourceAvailability].flatMap(FileAvailability.init(rawValue:)) // NEWER
+                sourceAvailability: row[colSourceAvailability].flatMap(FileAvailability.init(rawValue:)), // NEWER
+                lyrics: row[colLyrics]
             )
         }
         
@@ -253,7 +263,8 @@ public actor SQLiteSongRepository: SongRepository {
                 fileExtension: row[colFileExtension],
                 sampleRate: row[colSampleRate],
                 bitDepth: row[colBitDepth],
-                sourceAvailability: row[colSourceAvailability].flatMap(FileAvailability.init(rawValue:)) // NEWER
+                sourceAvailability: row[colSourceAvailability].flatMap(FileAvailability.init(rawValue:)), // NEWER
+                lyrics: row[colLyrics]
             )
         }
     }
@@ -333,6 +344,7 @@ public actor SQLiteSongRepository: SongRepository {
                         colSampleRate <- song.sampleRate ?? row[colSampleRate],
                         colBitDepth <- song.bitDepth ?? row[colBitDepth],
                         colSourceAvailability <- song.sourceAvailability?.rawValue ?? row[colSourceAvailability],
+                        colLyrics <- song.lyrics ?? row[colLyrics],
                         colUpdatedAt <- now,
                         // NEW: update new fields
                         colLocalFilePath <- song.localFilePath, // NEW
@@ -370,6 +382,7 @@ public actor SQLiteSongRepository: SongRepository {
                     colSampleRate <- song.sampleRate,
                     colBitDepth <- song.bitDepth,
                     colSourceAvailability <- song.sourceAvailability?.rawValue,
+                    colLyrics <- song.lyrics,
                     colCreatedAt <- song.createdAt.timeIntervalSince1970,
                     colSourceId <- song.sourceId,
                     colRelativePath <- song.relativePath,
@@ -394,9 +407,31 @@ public actor SQLiteSongRepository: SongRepository {
     }
 
     public func deleteSong(songId: Int64) async throws {
-        let query = songsTable.filter(colId == songId)
-        try db.run(query.delete())
-        try db.run(ftsSongsTable.filter(colFtsSongId == songId).delete())
+        try db.transaction {
+            try db.run(playlistSongsTable.filter(colPlaylistSongId == songId).delete())
+            try db.run(songsTable.filter(colId == songId).delete())
+            try db.run(ftsSongsTable.filter(colFtsSongId == songId).delete())
+        }
+    }
+
+    public func deleteSongsMissingFromSource(sourceId: Int64, relativePaths: Set<String>) async throws -> Int {
+        let source = SQLite.Expression<Int64?>("sourceId")
+        let relative = SQLite.Expression<String?>("relativePath")
+        let rows = try db.prepare(songsTable.filter(source == sourceId)).map { ($0[colId], $0[relative]) }
+        let staleIDs: [Int64] = rows.compactMap { row in
+            let (id, path) = row
+            guard let path, !relativePaths.contains(path) else { return nil }
+            return id
+        }
+        guard !staleIDs.isEmpty else { return 0 }
+        try db.transaction {
+            for id in staleIDs {
+                try db.run(playlistSongsTable.filter(colPlaylistSongId == id).delete())
+                try db.run(songsTable.filter(colId == id).delete())
+                try db.run(ftsSongsTable.filter(colFtsSongId == id).delete())
+            }
+        }
+        return staleIDs.count
     }
 
     public func deleteAlbum(album: String, artist: String?) async throws {
@@ -503,7 +538,8 @@ public actor SQLiteSongRepository: SongRepository {
                 fileExtension: row[colFileExtension],
                 sampleRate: row[colSampleRate],
                 bitDepth: row[colBitDepth],
-                sourceAvailability: row[colSourceAvailability].flatMap(FileAvailability.init(rawValue:)) // NEWER
+                sourceAvailability: row[colSourceAvailability].flatMap(FileAvailability.init(rawValue:)), // NEWER
+                lyrics: row[colLyrics]
             )
         }
     }
@@ -539,7 +575,8 @@ public actor SQLiteSongRepository: SongRepository {
                 fileExtension: row[colFileExtension],
                 sampleRate: row[colSampleRate],
                 bitDepth: row[colBitDepth],
-                sourceAvailability: row[colSourceAvailability].flatMap(FileAvailability.init(rawValue:))
+                sourceAvailability: row[colSourceAvailability].flatMap(FileAvailability.init(rawValue:)),
+                lyrics: row[colLyrics]
             )
         }
     }

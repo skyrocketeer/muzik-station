@@ -96,7 +96,7 @@ struct SongListView: View {
                     if viewModel.isLoadingPage {
                         HStack {
                             Spacer()
-                            ProgressView()
+                            LWOrbLoader(size: 36)
                             Spacer()
                         }
                     }

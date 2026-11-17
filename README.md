@@ -1,4 +1,4 @@
-# LocalWave
+# Music Station
 
 A SwiftUI music player for MP3, FLAC and other supported audio files on iPhone, iPad and native macOS. Choose music from Files or Finder. Browse your library by artist, album or song, search it, and play tracks without an Apple Music subscription.
 
@@ -8,7 +8,7 @@ A SwiftUI music player for MP3, FLAC and other supported audio files on iPhone, 
 
 ## Build and try it
 
-Use a Mac with Xcode 16.2 or newer and the iOS SDK. The app target requires iOS 18.0; the project defaults and unit-test target use iOS 18.2. Choose an iOS 18.2 or newer simulator to use the checked-in test plan. The targets use Swift 5 language mode.
+Use a Mac with Xcode 16.3 or newer and the iOS SDK. The app target requires iOS 18.0; the project defaults and unit-test target use iOS 18.2. Choose an iOS 18.2 or newer simulator to use the checked-in test plan. The targets use Swift 5 language mode.
 
 ```sh
 git clone https://github.com/olegpustovit/localwave.git
@@ -25,7 +25,7 @@ open localwave.xcodeproj
 
 Importing an iCloud source can require a network connection to download its files. Local playback depends on the selected files being available and accessible; this is not a promise that every cloud-backed file works offline.
 
-An empty library offers **Try the demo library**: 92 real synthesized recordings across 11 albums, imported as one local source. Existing libraries offer **Explore the library** and are not changed by that action. The bundled audio/catalog adds 101.5 MiB to the app; choosing the demo creates its local source files. Regenerate or verify them with [generate_demo_library.py](scripts/generate_demo_library.py).
+The first-run screen offers **Explore the library** or lets you add your own music from Files.
 
 ## What is in the source
 

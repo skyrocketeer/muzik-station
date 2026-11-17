@@ -41,8 +41,10 @@ public protocol SongRepository {
     func getSong(sourceId: Int64, relativePath: String) async -> Song?
     func updateBookmark(songId: Int64, bookmark: Data) async throws
     func updateSourceAvailability(songId: Int64, availability: FileAvailability) async throws
+    func updateLyrics(songId: Int64, lyrics: String?) async throws
     func updateSourceLocation(songId: Int64, sourceId: Int64, relativePath: String) async throws
     func deleteSong(songId: Int64) async throws
+    func deleteSongsMissingFromSource(sourceId: Int64, relativePaths: Set<String>) async throws -> Int
     func deleteAlbum(album: String, artist: String?) async throws
     func getSongsNeedingCopy() async -> [Song]
     func markSongForCopy(songId: Int64) async throws
@@ -80,10 +82,12 @@ public protocol SongImportService {
     ) async throws
 
     func importPathsWithFileProgress(paths: [SourcePath], onProgress: ((SongImportProgress) async -> Void)?) async throws
+    func reconcileDeletedFiles(sourceId: Int64, rootPathId: Int64) async throws -> Int
     func cancelImport() async
 }
 
 public extension SongImportService {
+    func reconcileDeletedFiles(sourceId: Int64, rootPathId: Int64) async throws -> Int { 0 }
     func importPathsWithFileProgress(paths: [SourcePath], onProgress: ((SongImportProgress) async -> Void)?) async throws {
         try await importPaths(paths: paths) { percentage, url in
             await onProgress?(SongImportProgress(percentage: percentage, url: url))

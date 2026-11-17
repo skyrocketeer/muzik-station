@@ -61,8 +61,9 @@ struct WaveFilesView: View {
     @Environment(\.lwWideLayout) private var wideLayout
     @StateObject private var model: SyncViewModel
     @State private var picker = false
-    @State private var audioPicker = false
+    @State private var pickingAudio = false
     @State private var addSheet = false
+    @State private var showingSourceItems = false
     @State private var reconnect: Source?
     @State private var sourceOptions: Source?
     @EnvironmentObject private var presenter: LWSheetPresenter
@@ -128,11 +129,8 @@ struct WaveFilesView: View {
                         path: URL(fileURLWithPath: source.dirPath).lastPathComponent, actions: sourceSheetActions(source))
                 }
             }
-            .fileImporter(isPresented: $picker, allowedContentTypes: [.folder], allowsMultipleSelection: true) { selection in
-                handleFolders(selection)
-            }
-            .fileImporter(isPresented: $audioPicker, allowedContentTypes: [.audio], allowsMultipleSelection: true) { selection in
-                handleAudio(selection)
+            .fileImporter(isPresented: $picker, allowedContentTypes: pickingAudio ? [.audio] : [.folder], allowsMultipleSelection: true) { selection in
+                if pickingAudio { handleAudio(selection) } else { handleFolders(selection) }
             }
             .alert("Unable to complete", isPresented: sourceErrorPresented) {
                 Button("OK") { error = nil; model.errorMessage = nil }
@@ -183,9 +181,15 @@ struct WaveFilesView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .top) {
+                        if showingSourceItems {
+                            Button { showingSourceItems = false } label: {
+                                HStack(spacing: 4) { LWIcon("back", size: 18); Text("Folders").lwLineBox(15, 21) }
+                                    .frame(minHeight: 44).padding(.trailing, 8)
+                            }.foregroundStyle(LWTheme.secondary).accessibilityLabel("Back to Folders")
+                        }
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Folders").font(LWTheme.text(32).weight(.medium)).tracking(-1.12).lwLineBox(32, 33.6).frame(height: headingHeight)
-                            Text("\(model.sources.count) sources, watched for changes")
+                            Text(showingSourceItems ? "My Music" : "Folders").font(LWTheme.text(32).weight(.medium)).tracking(-1.12).lwLineBox(32, 33.6).frame(height: headingHeight)
+                            Text(showingSourceItems ? "\(model.sources.count) folders in your library" : "\(model.sources.count) folders, watched for changes")
                                 .font(LWTheme.text(13)).foregroundStyle(LWTheme.secondary).lwLineBox(13, 18.2)
                         }
                         Spacer()
@@ -199,7 +203,7 @@ struct WaveFilesView: View {
                         Text("Point it at a folder.").font(LWTheme.text(28).weight(.medium))
                         Text("Your files stay where they are. Nothing is uploaded.")
                             .foregroundStyle(LWTheme.secondary)
-                        ForEach(Array(["Choose a folder in Files", "LocalWave indexes its audio files", "Play your music from the library"].enumerated()), id: \.offset) { index, title in
+                        ForEach(Array(["Choose a folder in Files", "Music Station indexes its audio files", "Play your music from the library"].enumerated()), id: \.offset) { index, title in
                             HStack(spacing: 16) {
                                 Text("\(index + 1)").font(LWTheme.data(13)).foregroundStyle(LWTheme.secondary)
                                 Text(title)
@@ -207,8 +211,12 @@ struct WaveFilesView: View {
                                 .overlay(alignment: .bottom) { Rectangle().fill(LWTheme.line).frame(height: 1) }
                         }
                     }
-                    ForEach(Array(model.sources.enumerated()), id: \.element.stableId) { index, source in
-                        sourceCard(source).padding(.bottom, 8).modifier(WaveFilesRise(index: index, startedAt: sourceRowsStartedAt))
+                    if !model.sources.isEmpty && !showingSourceItems {
+                        myMusicCard
+                    } else {
+                        ForEach(Array(model.sources.enumerated()), id: \.element.stableId) { index, source in
+                            sourceCard(source).padding(.bottom, 8).modifier(WaveFilesRise(index: index, startedAt: sourceRowsStartedAt))
+                        }
                     }
                     VStack(alignment: .leading, spacing: 0) {
                         Rectangle().fill(LWTheme.line).frame(height: 1).padding(.bottom, 16)
@@ -229,6 +237,30 @@ struct WaveFilesView: View {
 
                 }.padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 24)
             }
+    }
+
+    private var myMusicCard: some View {
+        Button { showingSourceItems = true } label: {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(LWTheme.action.opacity(0.16))
+                    LWIcon("folder", size: 25).foregroundStyle(LWTheme.action)
+                }.frame(width: 56, height: 56)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("My Music").font(LWTheme.text(17).weight(.medium)).foregroundStyle(LWTheme.ink)
+                    Text("\(model.sources.count) folders · \(model.sources.reduce(0) { $0 + ($1.id.flatMap { sourceStats[$0]?.songs } ?? 0) }) songs")
+                        .font(LWTheme.text(13)).foregroundStyle(LWTheme.secondary)
+                }
+                Spacer(minLength: 0)
+                LWIcon("chev", size: 16).foregroundStyle(LWTheme.secondary)
+            }
+            .padding(14)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(LWTheme.line, lineWidth: 1) }
+            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+        .buttonStyle(WaveSourceCardStyle())
+        .accessibilityLabel("My Music, \(model.sources.count) folders")
     }
 
     private var sourceOptionsPresented: Binding<Bool> {
@@ -254,6 +286,9 @@ struct WaveFilesView: View {
     }
 
     private func openSource(_ source: Source) {
+        // Refresh the source index on entry so moved/deleted files are reflected
+        // whenever the user opens an imported folder again.
+        model.resyncSource(source)
         var transaction = Transaction(); transaction.disablesAnimations = true
         withTransaction(transaction) {
             sourceSnapshots[source.stableId] = source
@@ -343,7 +378,7 @@ struct WaveFilesView: View {
                     Text(message).font(LWTheme.text(13)).lwLineBox(13, 18.85).fixedSize(horizontal: false, vertical: true)
                 }.padding(.vertical, 12)
                 HStack(spacing: 2) {
-                    Button { reconnect = source; picker = true } label: { Text("Reconnect folder").lwLineBox(14, 19.6) }
+                    Button { reconnect = source; pickingAudio = false; picker = true } label: { Text("Reconnect folder").lwLineBox(14, 19.6) }
                         .frame(maxWidth: .infinity).frame(minHeight: 44).background(LWTheme.ink).foregroundStyle(LWTheme.paper)
                     Button { sourceOptions = source } label: {
                         Text("Options").lwLineBox(14, 19.6).frame(maxWidth: .infinity).frame(minHeight: 44).background(LWTheme.key2)
@@ -411,7 +446,7 @@ struct WaveFilesView: View {
                 LWMenuAction(title: "Rescan now", icon: "rep", action: { model.resyncSource(source) })
             ]),
             LWMenuGroup([source.syncError != nil
-                ? LWMenuAction(title: "Reconnect folder…", icon: "folder", action: { reconnect = source; picker = true })
+                ? LWMenuAction(title: "Reconnect folder…", icon: "folder", action: { reconnect = source; pickingAudio = false; picker = true })
                 : LWMenuAction(title: "Keep everything offline", icon: "dl", disabled: songs.isEmpty, action: { keepSourceOffline(source) })]),
             LWMenuGroup([LWMenuAction(title: "Remove source", icon: "close", destructive: true, action: { confirmRemoveSource(source) })])
         ], preview: AnyView(sourceCardContents(source).allowsHitTesting(false)))
@@ -474,10 +509,10 @@ struct WaveFilesView: View {
                         LWIcon("close", size: 22).frame(width: 44, height: 44)
                     }.accessibilityLabel("Close").buttonStyle(LWIconButtonStyle()).padding(.trailing, -10)
                 }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 8)
-                Button { addSheet = false; picker = true } label: {
+                Button { addSheet = false; pickingAudio = false; picker = true } label: {
                     addOption("A folder", detail: "Watched for changes. iCloud Drive, Google Drive, Dropbox, On My iPhone, USB drives, SMB servers.")
                 }.padding(.bottom, 8)
-                Button { addSheet = false; audioPicker = true } label: {
+                Button { addSheet = false; pickingAudio = true; picker = true } label: {
                     addOption("Some files", detail: "Play them now; they join the library too.")
                 }
                 (Text("Google Drive not listed? ").fontWeight(.medium).foregroundStyle(LWTheme.ink) + Text("Install the Google Drive app, then in Files tap Browse → ⋯ → Edit and turn on Google Drive. Songs download from Drive when played.").foregroundStyle(LWTheme.secondary))
@@ -705,7 +740,7 @@ struct WaveFolderView: View {
                     risingPathIDs = Set((wideLayout ? desktopItems : visibleItems).prefix(wideLayout ? 16 : 14).map(\.pathId))
                     skipInitialBrowseRead = false
                     publishFolderState()
-                    return
+                    if !model.restoredSnapshot { return }
                 }
                 if !initialAncestryResolved {
                     if let paths = try? await dependencies.sourceService.importService().listItems(sourceId: source.id ?? -1, parentPathId: nil), !Task.isCancelled {
@@ -763,7 +798,10 @@ struct WaveFolderView: View {
                 await refreshTracks()
             }
             .onReceive(LWRefresh.libraryChanges) { _ in
-                Task { await refreshTracks() }
+                Task {
+                    await model.loadItems()
+                    await refreshTracks()
+                }
             }
 
     }
@@ -885,15 +923,15 @@ struct WaveFolderView: View {
                     HStack(spacing: 8) {
                         Button { Task { await playFolder(shuffled: false, useSelection: false) } } label: {
                             HStack(spacing: 8) { LWIcon("play", size: 18); Text("Play folder").lwLineBox(15, 21) }
-                                .frame(maxWidth: .infinity).frame(minHeight: 52).background(LWTheme.ink).foregroundStyle(LWTheme.paper)
+                                .frame(maxWidth: .infinity).frame(minHeight: 52).foregroundStyle(LWTheme.onAction).background(LWTheme.action, in: Capsule())
                         }
                         Button { Task { await playFolder(shuffled: true, useSelection: false) } } label: {
-                            LWIcon("shuf", size: 20).frame(width: 52, height: 52).background(LWTheme.key2)
+                            LWIcon("shuf", size: 20).frame(width: 52, height: 52).background(LWTheme.key2, in: Circle())
                         }.accessibilityLabel("Shuffle folder")
                         Button { Task { await toggleFolderOffline() } } label: {
                             LWIcon(folderKeptOffline ? "check" : "dl", size: 20)
                                 .frame(width: 52, height: 52)
-                                .background(folderKeptOffline ? LWTheme.ink : LWTheme.key2)
+                                .background(folderKeptOffline ? LWTheme.ink : LWTheme.key2, in: Circle())
                                 .foregroundStyle(folderKeptOffline ? LWTheme.paper : LWTheme.ink)
                         }.accessibilityLabel(folderKeptOffline ? "Kept offline" : "Keep folder offline")
                             .disabled(changingOffline)
@@ -1287,7 +1325,7 @@ struct WaveFolderView: View {
                 }.accessibilityLabel((model.selectedPathIds.contains(item.pathId) ? "Deselect " : "Select ") + item.name)
                     .accessibilityValue(model.selectedPathIds.contains(item.pathId) ? "Selected" : "Not selected")
             }
-            if loadingPathID == item.pathId { ProgressView().tint(LWTheme.signal) }
+            if loadingPathID == item.pathId { LWOrbLoader(size: 24) }
             LWMenuButton(request: { folderMenu(item) }) {
                 LWIcon("more", size: 18).frame(width: 44, height: 44)
             }.accessibilityLabel("Actions for \(item.name)")
@@ -1971,7 +2009,7 @@ struct WaveSettingsView: View {
                     }.contentShape(Rectangle())
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("LocalWave keeps folder bookmarks and caches songs as needed. Individually added files are copied; library data stays on this device.").lwLineBox(14, 19.6)
+                    Text("Music Station keeps folder bookmarks and caches songs as needed. Individually added files are copied; library data stays on this device.").lwLineBox(14, 19.6)
                     NavigationLink { PrivacyView() } label: {
                         Text("About & Privacy").lwLineBox(14, 19.6).underline()
                     }.frame(minHeight: 44, alignment: .leading)

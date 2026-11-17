@@ -50,7 +50,7 @@ public actor SourceAccess {
         var stale = false
         let url = try URL(resolvingBookmarkData: bookmark, options: sourceBookmarkResolutionOptions, bookmarkDataIsStale: &stale)
         guard !LocalWaveGeneratedPaths.contains(url, excludedURLs: excludedURLs) else {
-            throw CustomError.genericError("Choose your original music folder. LocalWave’s generated cache cannot be used as a source.")
+            throw CustomError.genericError("Choose your original music folder. Music Station’s generated cache cannot be used as a source.")
         }
         let scoped = url.startAccessingSecurityScopedResource()
         guard scoped || FileManager.default.isReadableFile(atPath: url.path) else {
@@ -132,7 +132,7 @@ public actor SourceAccess {
 
     public func reconnect(sourceId: Int64, to url: URL) async throws -> Source {
         guard !LocalWaveGeneratedPaths.contains(url, excludedURLs: excludedURLs) else {
-            throw CustomError.genericError("Choose your original music folder. LocalWave’s generated cache cannot be used as a source.")
+            throw CustomError.genericError("Choose your original music folder. Music Station’s generated cache cannot be used as a source.")
         }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }

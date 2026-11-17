@@ -298,7 +298,12 @@ class SyncViewModel: ObservableObject {
             if let error = updated.syncError { throw CustomError.genericError(error) }
         }
         if let sourceService, let songImportService {
-            let paths = try await sourceService.importService().listItems(sourceId: sourceId, parentPathId: updatedSource?.pathId ?? source.pathId)
+            let rootPathId = updatedSource?.pathId ?? source.pathId
+            // This runs only after a successful complete scan. Remove library
+            // entries whose source-relative files disappeared before importing
+            // the current index.
+            _ = try await songImportService.reconcileDeletedFiles(sourceId: sourceId, rootPathId: rootPathId)
+            let paths = try await sourceService.importService().listItems(sourceId: sourceId, parentPathId: rootPathId)
             importProgress = 0
             do {
                 try await songImportService.importPathsWithFileProgress(paths: paths) { progress in
@@ -367,7 +372,7 @@ class SyncViewModel: ObservableObject {
 
     func registerBookmark(_ folderURL: URL) throws {
         guard !LocalWaveGeneratedPaths.contains(folderURL) else {
-            throw CustomError.genericError("Choose your original music folder. LocalWave’s generated cache cannot be used as a source.")
+            throw CustomError.genericError("Choose your original music folder. Music Station’s generated cache cannot be used as a source.")
         }
         let scoped = folderURL.startAccessingSecurityScopedResource()
         guard scoped || FileManager.default.isReadableFile(atPath: folderURL.path) else {

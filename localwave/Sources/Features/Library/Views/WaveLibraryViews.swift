@@ -620,7 +620,7 @@ struct WaveLibraryView: View {
                             Text("Your music starts with a folder. Add music in Folders to build your library.")
                                 .foregroundStyle(LWTheme.secondary).padding(24)
                         }
-                        if model.loading && model.songs.isEmpty { ProgressView().frame(maxWidth: .infinity).padding(28) }
+                        if model.loading && model.songs.isEmpty { LWOrbLoader(size: 52).frame(maxWidth: .infinity).padding(28) }
                     }
                     .padding(.bottom, compact ? 24 : 0)
                 }
@@ -1049,7 +1049,7 @@ struct WaveLibraryView: View {
 
     private var listsHeader: some View {
         HStack {
-            Text("Lists").font(LWTheme.text(32).weight(.medium)).tracking(-1.12).lwLineBox(32, 33.6)
+            Text("Playlists").font(LWTheme.text(32).weight(.medium)).tracking(-1.12).lwLineBox(32, 33.6)
             Spacer()
 
         }.frame(minHeight: 44, alignment: .top).padding(.horizontal, 16).padding(.top, 10)
@@ -1057,7 +1057,6 @@ struct WaveLibraryView: View {
 
     private var listsBody: some View {
         VStack(alignment: .leading, spacing: 0) {
-            sectionLabel("Automatic")
             ForEach(Array(["Favorites", "Recently Added", "Most Played", "Kept Offline", "Offline", "Never Played"].enumerated()), id: \.element) { index, name in
                 WaveLibraryRouteLink(value: WaveLibraryRoute.automatic(name)) {
                     listLabel(["Recently Added": "Recently added", "Most Played": "Most played", "Kept Offline": "Kept offline", "Offline": "On this device now", "Never Played": "Never played"][name] ?? name, songs: model.automatic(name), automatic: true, divider: name != "Favorites")
@@ -1344,7 +1343,7 @@ struct WaveLibraryView: View {
                     Button { openFolder(target) } label: { Text(albumFolderLabel(target)).underline().lineLimit(1) }
                 }.font(LWTheme.text(13)).lwLineBox(13, 18.2).padding(.top, 4)
             }
-            playKeys(songs, showOffline: true).frame(maxWidth: 360).padding(.top, 20)
+            playKeys(songs, showOffline: songs.contains { model.availabilityByID[$0.uniqueId] == .inCloud }).frame(maxWidth: 360).padding(.top, 20)
         }
     }
 
@@ -1680,17 +1679,17 @@ struct WaveLibraryView: View {
     @ViewBuilder private func playKeyButtons(_ songs: [Song], showOffline: Bool) -> some View {
         Button { play(songs) } label: {
             HStack(spacing: 8) { LWIcon("play", size: 18); Text("Play").lwLineBox(15, 21).fixedSize(horizontal: true, vertical: false) }
-                .frame(maxWidth: .infinity).frame(minHeight: 52).foregroundStyle(LWTheme.onInk).background(LWTheme.ink)
+                .frame(maxWidth: .infinity).frame(minHeight: 52).foregroundStyle(LWTheme.onAction).background(LWTheme.action, in: Capsule())
         }.accessibilityIdentifier("library-play-context")
         Button { play(songs.shuffled()) } label: {
             HStack(spacing: 8) { LWIcon("shuf", size: 18); Text("Shuffle").lwLineBox(15, 21).fixedSize(horizontal: true, vertical: false) }
-                .frame(maxWidth: .infinity).frame(minHeight: 52).background(LWTheme.key2)
+                .frame(maxWidth: .infinity).frame(minHeight: 52).background(LWTheme.key2, in: Capsule())
         }
-        if showOffline {
+        if showOffline && songs.contains(where: { model.availabilityByID[$0.uniqueId] == .inCloud }) {
             let pinned = !songs.isEmpty && songs.allSatisfy { model.pins.contains(String($0.uniqueId)) }
             Button { Task { await model.togglePins(songs) } } label: {
                 HStack(spacing: 8) { LWIcon(pinned ? "check" : "dl", size: 18); Text(pinned ? "Kept offline" : "Keep offline").lwLineBox(15, 21).fixedSize(horizontal: true, vertical: false) }
-                    .frame(maxWidth: .infinity).frame(minHeight: 52).background(LWTheme.key2)
+                    .frame(maxWidth: .infinity).frame(minHeight: 52).background(LWTheme.key2, in: Capsule())
             }
         }
     }
@@ -1768,7 +1767,7 @@ private struct WaveLibrarySongRow: View {
                     if compact {
                         if numbered {
                             Group { if song.id == playerVM.currentSong?.id && !model.selecting { LWEqualizer(playing: playerVM.isPlaying) } else { Text(String(song.trackNumber ?? index + 1)).font(LWTheme.text(13).monospacedDigit()).lwLineBox(13, 18.2).foregroundStyle(LWTheme.secondary) } }.frame(width: 22, alignment: .trailing)
-                        } else { LWArtwork(song: song, size: 40) }
+                        } else { LWArtwork(song: song, size: compact && playlistID != nil ? 48 : 40) }
                     }
                     else {
                         Group {
@@ -1777,7 +1776,7 @@ private struct WaveLibrarySongRow: View {
                         }.frame(width: 26, alignment: .trailing)
                     }
                     VStack(alignment: .leading, spacing: 0) {
-                        waveHighlightedLabel(song.title, query: highlight).foregroundStyle(song.id == playerVM.currentSong?.id && !(compact && model.selecting) ? LWTheme.signal : LWTheme.ink).font(LWTheme.text(compact ? 15 : 14).weight(.regular)).lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1).lwLineBox(compact ? 15 : 14, compact ? 21 : 19.6)
+                        waveHighlightedLabel(song.title, query: highlight).foregroundStyle(song.id == playerVM.currentSong?.id && !(compact && model.selecting) ? LWTheme.action : LWTheme.ink).font(LWTheme.text(compact ? 15 : 14).weight(.regular)).lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1).lwLineBox(compact ? 15 : 14, compact ? 21 : 19.6)
                         if compact { waveHighlightedLabel(blockedSource.map { $0 + " needs reconnecting" } ?? (model.selecting ? song.artist : numbered ? albumFileSubtitle : song.artist + " · " + song.album), query: highlight).font(LWTheme.text(13)).foregroundStyle(LWTheme.secondary).lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1).lwLineBox(13, 18.2) }
                     }.frame(maxWidth: .infinity, alignment: .leading)
                     if !compact {
@@ -1810,7 +1809,7 @@ private struct WaveLibrarySongRow: View {
             } else if compact && blockedSource != nil { Color.clear.frame(width: compact ? 44 : 52, height: compact ? 44 : 38) }
             else { LWMenuButton(request: { menuRequest() }) { LWIcon("more", size: compact ? 18 : 16).frame(width: compact ? 44 : 32, height: compact ? 44 : 32).padding(.trailing, compact ? 0 : 20).foregroundStyle(LWTheme.secondary) }.accessibilityLabel("Actions for \(song.title)") }
         }
-        .padding(.leading, compact ? 16 : 0).padding(.trailing, compact ? 6 : 0).frame(minHeight: compact ? 56 : 38)
+        .padding(.leading, compact ? 16 : 0).padding(.trailing, compact ? 6 : 0).frame(minHeight: compact ? (playlistID != nil ? 68 : 56) : 38)
         .offset(x: swipeOffset)
         .background {
             HStack {
@@ -1827,9 +1826,22 @@ private struct WaveLibrarySongRow: View {
         }
         .background {
             if !compact && dropTargeted { LWTheme.paper.overlay(LWTheme.signal.opacity(0.08)) }
-            else { (!compact && model.selected.contains(song.uniqueId) ? LWTheme.panel2 : hovering && !compact ? LWTheme.panel.opacity(0.6) : LWTheme.paper) }
+            else if compact {
+                let playing = song.id == playerVM.currentSong?.id && playerVM.isPlaying && !model.selecting
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.white.opacity(0.035))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(playing ? LWTheme.action.opacity(0.12) : Color.white.opacity(0.035))
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(playing ? LWTheme.action.opacity(0.28) : Color.white.opacity(0.10), lineWidth: 1)
+                    }
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+            } else { (!compact && model.selected.contains(song.uniqueId) ? LWTheme.panel2 : hovering && !compact ? LWTheme.panel.opacity(0.6) : LWTheme.paper) }
         }
-        .accessibilityValue(compact && model.selecting ? (model.selected.contains(song.uniqueId) ? "Selected" : "Not selected") : "")
+        .accessibilityValue(compact && model.selecting ? (model.selected.contains(song.uniqueId) ? "Selected" : "Not selected") : song.id == playerVM.currentSong?.id && playerVM.isPlaying ? "Now playing" : "")
         .opacity(compact && blockedSource != nil ? 0.45 : 1)
         .disabled(compact && blockedSource != nil)
         .onHover { hovering = $0 }
@@ -1843,7 +1855,7 @@ private struct WaveLibrarySongRow: View {
             modifierKeys = modifiers
         })
 #endif
-        .overlay(alignment: .top) { if compact && index > 0 { Rectangle().fill(LWTheme.line).frame(height: 1).padding(.leading, 16) } }
+        .overlay(alignment: .top) { if !compact && index > 0 { Rectangle().fill(LWTheme.line).frame(height: 1).padding(.leading, 16) } }
         .modifier(LWCollapsedTableRules(top: !compact, bottom: !compact && selectionOrder.last == song.uniqueId))
         .overlay { if !compact && dropTargeted { Rectangle().strokeBorder(LWTheme.signal, lineWidth: 2) } }
         .modifier(WaveConditionalClip(enabled: compact))
@@ -2066,7 +2078,7 @@ private struct WaveListDetail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 listHeader
-                LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                LazyVStack(spacing: wideLayout ? 0 : 8, pinnedViews: [.sectionHeaders]) {
                     Section {
                         if songs.isEmpty && !wideLayout {
                             Text("Empty for now.").font(LWTheme.text(14)).lwLineBox(14, 19.6)
@@ -2175,13 +2187,25 @@ private struct WaveListDetail: View {
                         .accessibilityAction(named: "Add songs") { addingSongs = true }
                 }.padding(.trailing, 16)
             }.font(LWTheme.text(15)).padding(.top, 10)
-            Text(playlist?.name ?? "List").font(LWTheme.text(32).weight(.medium)).tracking(-1.12).lwLineBox(32, 33.6).padding(.horizontal, 16)
-            Text("\(songs.count) songs").font(LWTheme.text(13)).lwLineBox(13, 18.2).foregroundStyle(LWTheme.secondary).padding(.horizontal, 16).padding(.top, 4)
+            VStack(alignment: .leading, spacing: 12) {
+                if let cover = songs.first {
+                    LWArtwork(song: cover, size: 148)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .shadow(color: LWTheme.action.opacity(0.2), radius: 18, x: 0, y: 8)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .accessibilityHidden(true)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("PLAYLIST").font(LWTheme.data(11).weight(.medium)).tracking(1.2).foregroundStyle(LWTheme.secondary)
+                    Text(playlist?.name ?? "List").font(LWTheme.text(30).weight(.semibold)).tracking(-0.9).lwLineBox(30, 34).fixedSize(horizontal: false, vertical: true)
+                    Text("\(songs.count) songs · \(listMinutes)").font(LWTheme.text(13)).lwLineBox(13, 18.2).foregroundStyle(LWTheme.secondary)
+                }
+            }.padding(.horizontal, 20).padding(.top, 16)
             }
             (dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))) {
-                Button { play(songs) } label: { HStack(spacing: 8) { LWIcon("play", size: 18); Text("Play").lwLineBox(15, 21) }.frame(maxWidth: .infinity).frame(minHeight: 52).foregroundStyle(LWTheme.onInk).background(LWTheme.ink) }
+                LWActionButton(tone: .primary, action: { play(songs) }) { HStack(spacing: 8) { LWIcon("play", size: 18); Text("Play").lwLineBox(15, 21) } }
                     .accessibilityIdentifier("library-play-context")
-                Button { play(songs.shuffled()) } label: { HStack(spacing: 8) { LWIcon("shuf", size: 18); Text("Shuffle").lwLineBox(15, 21) }.frame(maxWidth: .infinity).frame(minHeight: 52).background(LWTheme.key2) }
+                LWActionButton(tone: .secondary, action: { play(songs.shuffled()) }) { HStack(spacing: 8) { LWIcon("shuf", size: 18); Text("Shuffle").lwLineBox(15, 21) } }
             }.font(LWTheme.text(15).weight(.medium)).padding(16)
         }
     }

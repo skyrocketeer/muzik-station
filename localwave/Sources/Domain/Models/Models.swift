@@ -252,6 +252,7 @@ public struct Song: Sendable, Identifiable, Equatable {
     public let sampleRate: Double?
     public let bitDepth: Int?
     public let sourceAvailability: FileAvailability?
+    public let lyrics: String?
 
     public init(
         id: Int64?,
@@ -278,7 +279,8 @@ public struct Song: Sendable, Identifiable, Equatable {
         fileExtension: String? = nil,
         sampleRate: Double? = nil,
         bitDepth: Int? = nil,
-        sourceAvailability: FileAvailability? = nil
+        sourceAvailability: FileAvailability? = nil,
+        lyrics: String? = nil
     ) {
         self.id = id
         self.songKey = songKey
@@ -305,6 +307,7 @@ public struct Song: Sendable, Identifiable, Equatable {
         self.sampleRate = sampleRate
         self.bitDepth = bitDepth
         self.sourceAvailability = sourceAvailability
+        self.lyrics = lyrics
     }
 
     public func copyWith(_ fp: String?, _ st: FileState) -> Song {
@@ -334,7 +337,8 @@ public struct Song: Sendable, Identifiable, Equatable {
             fileExtension: fileExtension,
             sampleRate: sampleRate,
             bitDepth: bitDepth,
-            sourceAvailability: sourceAvailability
+            sourceAvailability: sourceAvailability,
+            lyrics: lyrics
         )
     }
 
@@ -364,7 +368,8 @@ public struct Song: Sendable, Identifiable, Equatable {
             fileExtension: fileExtension,
             sampleRate: sampleRate,
             bitDepth: bitDepth,
-            sourceAvailability: sourceAvailability
+            sourceAvailability: sourceAvailability,
+            lyrics: lyrics
         )
     }
 

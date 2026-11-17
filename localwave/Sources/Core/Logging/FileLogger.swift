@@ -98,7 +98,7 @@ public class FileLogger {
         // Write header
         let header = """
         ================================================================================
-        LocalWave TUI Log
+        Music Station Log
         Started: \(Date())
         Log file: \(logFileURL.path)
         ================================================================================

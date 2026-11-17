@@ -16,7 +16,6 @@ enum LWTrackMenu {
         onRetry: ((Song) -> Void)? = nil
     ) -> LWMenuRequest {
         let one = targets.count == 1 ? targets.first : nil
-        let pinned = targets.allSatisfy { model.pins.contains(String($0.uniqueId)) }
         let favored = targets.allSatisfy { $0.isFavorite != 0 }
         let groups = [
             LWMenuGroup([
@@ -66,9 +65,7 @@ enum LWTrackMenu {
             } }
         }))
         result.append(LWMenuGroup(navigation))
-        var files = [LWMenuAction(title: pinned ? "Stop keeping offline" : "Keep offline", icon: pinned ? "check" : "dl", action: {
-            Task { await model.togglePins(targets) }
-        })]
+        var files: [LWMenuAction] = []
         if let one, one.fileState == .failed, let id = one.id {
             files.append(LWMenuAction(title: "Retry download", icon: "rep", action: {
                 if let onRetry { onRetry(one); return }
@@ -79,7 +76,7 @@ enum LWTrackMenu {
             }))
         }
         files.append(LWMenuAction(title: "Share…", icon: "share", disabled: sharing, action: { onShare(targets) }))
-        result.append(LWMenuGroup(files))
+        if !files.isEmpty { result.append(LWMenuGroup(files)) }
         if let playlistID {
             result.append(LWMenuGroup([LWMenuAction(title: "Remove from list", icon: "close", shortcut: "⌫", destructive: true, action: {
                 Task { await model.remove(targets.compactMap(\.id), from: playlistID) }

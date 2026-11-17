@@ -14,37 +14,41 @@ struct WavePlaybackKeys: View {
     var desktop = false
     @State private var hovered: String?
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: desktop ? 2 : 16) {
             key("prev", label: "Previous", action: player.previousSong)
             Button(action: player.playPause) {
                 Group {
                     if player.isLoading { Rectangle().frame(width: 12, height: 12).frame(width: desktop ? 22 : 28, height: desktop ? 22 : 28) }
                     else { LWIcon(player.isPlaying ? "pause" : "play", size: desktop ? 22 : 28).modifier(LWPop(trigger: player.isPlaying)) }
                 }
+                .frame(width: desktop ? 48 : 64, height: desktop ? 48 : 64)
+                .foregroundStyle(LWTheme.onAction)
+                .background(LWTheme.action, in: Circle())
+                .opacity(desktop && hovered == "play" ? 0.9 : 1)
+                .overlay(alignment: .bottom) { if player.isLoading { WaveLoadingFill().frame(width: 32, height: 3).padding(.bottom, 5) } }
                 .frame(maxWidth: desktop ? nil : .infinity)
                 .frame(width: desktop ? 68 : nil, height: desktop ? 71 : 84)
-                .foregroundStyle(LWTheme.onInk)
-                .opacity(desktop && hovered == "play" ? 0.9 : 1)
-                .overlay(alignment: .bottom) { if player.isLoading { WaveLoadingFill().frame(height: 4) } }
             }
-            .buttonStyle(LWKeyStyle(pressedOpacity: desktop ? 1 : 0.88, background: LWTheme.ink, pressedBackground: desktop ? LWTheme.ink : LWTheme.paper))
+            .buttonStyle(LWKeyStyle(pressedOpacity: 0.8))
             .onHover { hovered = $0 ? "play" : nil }
             .accessibilityLabel(player.isLoading ? "Cancel opening file" : player.isPlaying ? "Pause" : "Play")
             .accessibilityIdentifier("player.playPause")
             key("next", label: "Next", action: player.nextSong)
         }
-        .padding(.leading, desktop ? 0 : 2).padding(.trailing, 2).padding(.top, desktop ? 0 : 2)
-        .frame(height: desktop ? 71 : 86).background(LWTheme.panel2)
+        .padding(.horizontal, desktop ? 0 : 18).padding(.top, desktop ? 0 : 2)
+        .frame(height: desktop ? 71 : 86).background(desktop ? LWTheme.panel : LWTheme.paper)
         .buttonStyle(LWKeyStyle())
         .disabled(player.currentSong == nil)
     }
     private func key(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             LWIcon(icon, size: desktop ? 20 : 28)
+                .frame(width: desktop ? 44 : 52, height: desktop ? 44 : 52)
+                .background(LWTheme.key2, in: Circle())
                 .frame(maxWidth: desktop ? nil : .infinity)
                 .frame(width: desktop ? 68 : nil, height: desktop ? 71 : 84)
                 .foregroundStyle(LWTheme.ink)
-        }.buttonStyle(LWKeyStyle(background: desktop ? (hovered == icon ? LWTheme.paper : LWTheme.key) : LWTheme.key2, pressedBackground: desktop ? nil : LWTheme.paper))
+        }.buttonStyle(LWKeyStyle(pressedOpacity: 0.72))
             .animation(reduceMotion ? nil : LWMotion.out(LWMotion.quick), value: hovered)
             .accessibilityLabel(label).onHover { hovered = $0 ? icon : nil }
     }
@@ -83,20 +87,20 @@ struct WaveTransport: View {
                         Group {
                             if player.isLoading { Rectangle().frame(width: 10, height: 10).frame(width: 22, height: 22) }
                             else { LWIcon(player.isPlaying ? "pause" : "play", size: 22).modifier(LWPop(trigger: player.isPlaying)) }
-                        }.frame(width: 64)
-                            .frame(minHeight: 63, maxHeight: .infinity)
-                            .foregroundStyle(LWTheme.onInk).background(LWTheme.ink)
-                            .overlay(alignment: .bottom) { if player.isLoading { WaveLoadingFill().frame(height: 4) } }
+                        }.frame(width: 44, height: 44)
+                            .foregroundStyle(LWTheme.onAction).background(LWTheme.action, in: Circle())
+                            .overlay(alignment: .bottom) { if player.isLoading { WaveLoadingFill().frame(width: 24, height: 3).padding(.bottom, 4) } }
+                            .frame(width: 64, height: 63)
                     }.buttonStyle(LWKeyStyle()).accessibilityLabel(player.isLoading ? "Cancel opening file" : player.isPlaying ? "Pause" : "Play")
                         .disabled(shuffling || (player.currentSong == nil && libraryCount == 0))
                 }
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 1)
-                .overlay(alignment: .bottom) { Rectangle().fill(LWTheme.line).frame(height: 1) }
+                .background(LWTheme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .padding(.horizontal, 8).padding(.vertical, 5)
                 .overlay(alignment: .topLeading) {
                     GeometryReader { proxy in
-                        Rectangle().fill(LWTheme.ink).frame(width: proxy.size.width * player.playbackProgress, height: 2)
-                    }.frame(height: 2).offset(y: -1).allowsHitTesting(false)
+                        Capsule().fill(LWTheme.action).frame(width: max(0, (proxy.size.width - 16) * player.playbackProgress), height: 2)
+                    }.frame(height: 2).offset(x: 8, y: 5).allowsHitTesting(false)
                 }
             } else {
                 HStack(spacing: 16) {
@@ -285,30 +289,64 @@ struct WaveNowView: View {
 
     private func nowContent(_ size: CGSize) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            LWArtwork(song: player.currentSong, size: artworkSize(size), matched: compact && artmatchEnabled)
-                .padding(.top, 4)
-                .frame(maxWidth: .infinity, alignment: compact ? .center : .leading)
-                .frame(height: compact ? artworkRegionHeight(size) : 204)
-                .contextMenu { trackActions }
-            trackInformation
-                .padding(.top, compact ? 16 : 14)
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { measuredInformationHeight = $0 - (compact ? 16 : 14) }
-                .modifier(WaveEntrance(appeared: appeared, index: 1))
-            playbackClock.padding(.top, 14)
-                .modifier(WaveEntrance(appeared: appeared, index: 2))
+            VStack(alignment: .leading, spacing: 0) {
+                ZStack(alignment: .bottom) {
+                    LWArtwork(song: player.currentSong, size: artworkSize(size), matched: compact && artmatchEnabled)
+                    if compact, player.isPlaying, player.currentSong?.coverArtPath != nil, let lyric = currentArtworkLyric {
+                        Text(lyric)
+                            .font(LWTheme.text(16).weight(.semibold))
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(.white)
+                            .lineLimit(3)
+                            .padding(.horizontal, 16).padding(.vertical, 12)
+                            .frame(maxWidth: .infinity)
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .padding(12)
+                            .id(lyric)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                            .accessibilityLabel("Lyrics: \(lyric)")
+                    }
+                }
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .padding(.top, 4)
+                    .frame(maxWidth: .infinity, alignment: compact ? .center : .leading)
+                    .frame(height: compact ? artworkRegionHeight(size) : 204)
+                    .animation(reduceMotion ? nil : LWMotion.out(LWMotion.base), value: currentArtworkLyric)
+                    .contextMenu { trackActions }
+                trackInformation
+                    .padding(.top, compact ? 16 : 14)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { measuredInformationHeight = $0 - (compact ? 16 : 14) }
+                    .modifier(WaveEntrance(appeared: appeared, index: 1))
+                playbackClock.padding(.top, 14)
+                    .modifier(WaveEntrance(appeared: appeared, index: 2))
+                if compact {
+                    VStack(spacing: 6) {
+                        WaveformView(song: player.currentSong, sourceURL: player.playbackURL, progress: player.playbackProgress, height: 56, seek: player.seekByFraction)
+                        HStack { Text(player.currentTime); Spacer(); Text(player.duration) }
+                            .font(LWTheme.data(11)).lwLineBox(11, 15.4, data: true).foregroundStyle(LWTheme.secondary)
+                            .frame(minHeight: 15.4)
+                    }.padding(.top, 14).modifier(WaveEntrance(appeared: appeared, index: 3))
+                } else { metadata.padding(.top, 14) }
+            }
+            .padding(.horizontal, compact ? 16 : 20)
+            .padding(.bottom, 16)
+            .background(LWTheme.panel, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
             if compact {
-                VStack(spacing: 6) {
-                    WaveformView(song: player.currentSong, sourceURL: player.playbackURL, progress: player.playbackProgress, height: 56, seek: player.seekByFraction)
-                    HStack { Text("0:00"); Spacer(); Text(player.duration) }
-                        .font(LWTheme.data(11)).lwLineBox(11, 15.4, data: true).foregroundStyle(LWTheme.secondary)
-                        .frame(minHeight: 15.4)
-                }.padding(.top, 14).modifier(WaveEntrance(appeared: appeared, index: 3))
                 WaveModeKeys(showQueue: true) { queuePresented = true }
                     .padding(.top, 14).modifier(WaveEntrance(appeared: appeared, index: 4))
-            } else { metadata.padding(.top, 14) }
+            }
         }
         .padding(.horizontal, compact ? 16 : 20)
         .padding(.bottom, compact ? 10 : 0)
+    }
+
+    private var currentArtworkLyric: String? {
+        let lines = player.currentSong?.lyrics?.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty } ?? []
+        guard !lines.isEmpty else { return nil }
+        let index = min(lines.count - 1, Int(player.playbackProgress * Double(lines.count)))
+        return lines[index]
     }
 
     private var trackInformation: some View {
@@ -643,7 +681,9 @@ struct WaveModeKeys: View {
             }
             modeButton(showQueue ? "\(max(0, player.queue.count - player.currentQueueIndex - 1)) up next" : "Now playing", icon: showQueue ? "queue" : "side", active: !showQueue && panelVisible, action: onQueue)
                 .accessibilityLabel(showQueue ? "Queue" : "Toggle now playing panel")
-        }.padding(2).background(LWTheme.panel2).buttonStyle(LWKeyStyle())
+        }.padding(4)
+            .background(LWTheme.panel2, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .buttonStyle(LWKeyStyle())
             .fixedSize(horizontal: !showQueue, vertical: true)
     }
     private func modeButton(_ text: String, icon: String, active: Bool, action: @escaping () -> Void) -> some View {
@@ -661,7 +701,8 @@ struct WaveModeKeys: View {
             .frame(maxWidth: showQueue ? .infinity : nil)
             .frame(width: showQueue ? nil : 44).frame(minHeight: showQueue ? 44 : 40)
             .foregroundStyle(active ? LWTheme.onInk : LWTheme.ink)
-            .background(active ? LWTheme.ink : !showQueue && hoveredMode == icon ? LWTheme.paper : LWTheme.key)
+            .background(active ? LWTheme.ink : !showQueue && hoveredMode == icon ? LWTheme.paper : LWTheme.key,
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .animation(reduceMotion ? nil : LWMotion.out(LWMotion.quick), value: active)
             .animation(reduceMotion ? nil : LWMotion.out(LWMotion.quick), value: hoveredMode)
             .overlay(alignment: .bottomTrailing) {

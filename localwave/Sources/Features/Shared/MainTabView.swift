@@ -216,7 +216,7 @@ struct MainTabView: View {
         .modifier(LWNativeMusicImporters(folder: $nativeFolderPicker, audio: $nativeAudioPicker) { result, folders in
             completeNativeMusicPicker(result, folders: folders)
         })
-        .alert("LocalWave", isPresented: Binding(get: { dataError != nil || libraryModel.error != nil || (!showNow && (!isWideLayout || !showPanel) && playerVM.playbackError != nil) }, set: { if !$0 { dataError = nil; libraryModel.error = nil; playerVM.playbackError = nil } })) {
+        .alert("Music Station", isPresented: Binding(get: { dataError != nil || libraryModel.error != nil || (!showNow && (!isWideLayout || !showPanel) && playerVM.playbackError != nil) }, set: { if !$0 { dataError = nil; libraryModel.error = nil; playerVM.playbackError = nil } })) {
             Button("OK") { dataError = nil; libraryModel.error = nil; playerVM.playbackError = nil }
         } message: { Text(dataError ?? libraryModel.error ?? playerVM.playbackError ?? "") }
         .background {
@@ -463,6 +463,7 @@ struct MainTabView: View {
         let frame = navigation.current
         let frameID = frame.id
         if section == "Settings" { Color.clear }
+        else if section == "Podcasts" { WavePodcastsView(onBrowse: { select("Folders") }) }
         else if case .folder(let sourceID, let pathID, _)? = playbackDestination, let source = sources.first(where: { $0.id == sourceID }) {
             NavigationStack {
                 WaveFolderView(source: source, dependencies: dependencies, initialParentPathId: pathID, backTitle: rootBackTitle,
@@ -688,14 +689,17 @@ struct MainTabView: View {
                     throw CustomError.genericError("The music source is unavailable.")
                 }
                 let loadedSources = try await dependencies.sourceService.repository().findOneByUserId(userId: userID, path: nil)
-                // Make the newly imported source available to the existing
-                // navigation guard before opening its exact root folder.
                 sources = loadedSources
-                let destination: Source?
                 if folders {
-                    let selectedPath = urls[0].standardizedFileURL.path
-                    destination = loadedSources.first { URL(fileURLWithPath: $0.dirPath).standardizedFileURL.path == selectedPath }
-                } else if let sourceID = imported.first?.sourceId {
+                    // Folder imports add sources to the existing Folders screen.
+                    // Do not navigate into only the first source when several
+                    // folders were selected.
+                    showCommands = false; showKeyboardHelp = false; showSettings = false
+                    select("Folders")
+                    return
+                }
+                let destination: Source?
+                if let sourceID = imported.first?.sourceId {
                     destination = loadedSources.first { $0.id == sourceID }
                 } else {
                     let addedFiles = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Added Files").path
@@ -772,22 +776,50 @@ struct MainTabView: View {
         showSettings = false
     }
     private var navigationDeck: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: dynamicTypeSize.isAccessibilitySize ? 2 : 4), spacing: 2) {
-            ForEach(["Library", "Folders", "Lists", "Find"], id: \.self) { label in
-                let active = label == "Library" ? ["Library", "Albums", "Artists", "Songs"].contains(section) : section == label || (label == "Lists" && isListSection) || (label == "Folders" && section == "Add Music")
-                Button { select(label) } label: {
-                    HStack(spacing: 6) {
-                        if active { Rectangle().fill(LWTheme.ink).frame(width: 6, height: 6) }
-                        Text(label).lwLineBox(15, 21)
-                    }.font(LWTheme.text(15)).fontWeight(active ? .medium : .regular)
-                        .lineLimit(1).minimumScaleFactor(0.75)
-                        .foregroundStyle(active ? LWTheme.ink : LWTheme.secondary)
-                        .frame(maxWidth: .infinity).frame(minHeight: dynamicTypeSize.isAccessibilitySize ? 54 : 52)
-                        .background(active ? LWTheme.panel : LWTheme.key)
-                }.accessibilityAddTraits(active ? .isSelected : [])
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: dynamicTypeSize.isAccessibilitySize ? 3 : 5), spacing: 0) {
+            ForEach(["Library", "Folders", "Playlists", "Podcasts", "Find"], id: \.self) { label in
+                let route = label == "Playlists" ? "Lists" : label
+                let active = label == "Library" ? ["Library", "Albums", "Artists", "Songs"].contains(section) : section == route || (label == "Playlists" && isListSection) || (label == "Folders" && section == "Add Music")
+                Button { select(route) } label: {
+                    VStack(spacing: 2) {
+                        Image(systemName: navigationSymbol(label, active: active))
+                            .font(.system(size: 20, weight: active ? .semibold : .regular))
+                            .frame(height: 22)
+                            .foregroundStyle(Color.white)
+                            .accessibilityHidden(true)
+                        Text(label).font(LWTheme.text(12).weight(active ? .semibold : .medium))
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                            .frame(height: 16)
+                    }
+                    .foregroundStyle(active ? LWTheme.onInk : LWTheme.secondary)
+                    .frame(maxWidth: .infinity).frame(minHeight: dynamicTypeSize.isAccessibilitySize ? 62 : 48)
+                    .background {
+                        if active {
+                            Capsule().fill(LWTheme.action.opacity(0.88))
+                                .overlay { Capsule().strokeBorder(Color.white.opacity(0.28), lineWidth: 1) }
+                                .shadow(color: LWTheme.action.opacity(0.20), radius: 5, x: 0, y: 2)
+                        }
+                    }
+                    .contentShape(Capsule())
+                }.accessibilityLabel(label).accessibilityAddTraits(active ? .isSelected : [])
             }
-        }.padding(.horizontal, 2).padding(.top, 2).background(LWTheme.panel2).buttonStyle(LWKeyStyle())
+        }
+        .padding(3)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: dynamicTypeSize.isAccessibilitySize ? 28 : 30, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: dynamicTypeSize.isAccessibilitySize ? 28 : 30, style: .continuous).strokeBorder(Color.white.opacity(0.18), lineWidth: 1) }
+        .padding(.horizontal, 12).padding(.vertical, 4)
+        .background(LWTheme.paper.ignoresSafeArea(edges: .bottom))
+        .buttonStyle(.plain)
             .animation(reduceMotion ? nil : LWMotion.out(LWMotion.quick), value: section)
+    }
+    private func navigationSymbol(_ label: String, active: Bool) -> String {
+        switch label {
+        case "Library": return active ? "square.stack.fill" : "square.stack"
+        case "Folders": return active ? "folder.fill" : "folder"
+        case "Playlists": return "music.note.list"
+        case "Podcasts": return "dot.radiowaves.left.and.right"
+        default: return "magnifyingglass"
+        }
     }
     private var offlineBanner: some View {
         Button { simulateNoNetwork = false } label: {
@@ -852,7 +884,7 @@ struct MainTabView: View {
                         .animation(reduceMotion ? nil : LWMotion.out(LWMotion.quick), value: hoveredSideItem)
                     }
                     sideItem("Add folder or files", symbol: "plus", route: "Add Music", height: rowHeight)
-                    groupLabel("Lists")
+                    groupLabel("Playlists")
                     sideItem("Favorites", count: songs.filter { $0.isFavorite != 0 }.count, height: rowHeight)
                     sideItem("Recently added", count: min(24, songs.count), route: "Recently Added", height: rowHeight)
                     sideItem("Most played", count: min(24, songs.filter { (counts[String($0.uniqueId)] ?? 0) > 0 }.count), route: "Most Played", height: rowHeight)
@@ -1036,6 +1068,32 @@ struct MainTabView: View {
             }
             if countsRevision == revision { offlineCount = count; offlineBytes = bytes }
         } catch { dataError = error.localizedDescription }
+    }
+}
+
+private struct WavePodcastsView: View {
+    let onBrowse: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "mic.fill")
+                .font(.system(size: 30, weight: .medium))
+                .foregroundStyle(LWTheme.action)
+                .frame(width: 72, height: 72)
+                .background(LWTheme.action.opacity(0.12), in: Circle())
+            Text("Podcasts").font(LWTheme.text(28).weight(.medium))
+            Text("Podcast library setup is needed before you can add shows, episodes, and cover art.")
+                .font(LWTheme.text(14)).foregroundStyle(LWTheme.secondary)
+                .multilineTextAlignment(.center).frame(maxWidth: 260)
+            Button(action: onBrowse) {
+                Text("Browse folders").font(LWTheme.text(14).weight(.medium))
+                    .padding(.horizontal, 20).frame(minHeight: 44)
+                    .background(LWTheme.key2, in: Capsule())
+            }.buttonStyle(.plain).padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(LWTheme.paper)
+        .accessibilityElement(children: .contain)
     }
 }
 

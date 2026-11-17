@@ -8,13 +8,11 @@ struct WaveOnboardingView: View {
     let onImported: () -> Void
     let onExplore: () -> Void
     @EnvironmentObject private var playerVM: PlayerViewModel
-    @State private var folderPicker = false
-    @State private var audioPicker = false
+    @State private var picker = false
+    @State private var pickingAudio = false
     @State private var driveExpanded = false
     @State private var adding = false
     @State private var error: String?
-    @State private var demoAvailable = false
-    @State private var checkingDemo = true
     @State private var songCount = 0
 
     var body: some View {
@@ -22,7 +20,7 @@ struct WaveOnboardingView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .top) {
-                        Text("LocalWave").font(LWTheme.text(13)).lwLineBox(13, 18.2)
+                        Text("Music Station").font(LWTheme.text(13)).lwLineBox(13, 18.2)
                         Spacer()
                         Text("v2").font(LWTheme.data(12)).lwLineBox(12, 16.8, data: true)
                     }.foregroundStyle(LWTheme.secondary).frame(minHeight: 18.2)
@@ -36,7 +34,7 @@ struct WaveOnboardingView: View {
                     VStack(spacing: 0) {
                         Rectangle().fill(LWTheme.line).frame(height: 1)
                         step("1", "Choose a folder in Files")
-                        step("2", "LocalWave indexes it in the background")
+                        step("2", "Music Station indexes it in the background")
                         step("3", "Play at once; cloud songs fetch on play")
                     }.padding(.top, 28)
                     Spacer(minLength: 0)
@@ -48,9 +46,8 @@ struct WaveOnboardingView: View {
         }
         .background(LWTheme.paper).foregroundStyle(LWTheme.ink).buttonStyle(.plain)
         .accessibilityElement(children: .contain).accessibilityAddTraits(.isModal)
-        .task { await checkDemoAvailability() }
-        .fileImporter(isPresented: $folderPicker, allowedContentTypes: [.folder], allowsMultipleSelection: true) { importFiles($0, play: false) }
-        .fileImporter(isPresented: $audioPicker, allowedContentTypes: [.audio], allowsMultipleSelection: true) { importFiles($0, play: true) }
+        .task { await loadSongCount() }
+        .fileImporter(isPresented: $picker, allowedContentTypes: pickingAudio ? [.audio] : [.folder], allowsMultipleSelection: true) { importFiles($0, play: pickingAudio) }
         .alert("Unable to add music", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK") { error = nil }
         } message: { Text(error ?? "") }
@@ -67,7 +64,7 @@ struct WaveOnboardingView: View {
             Text("iCloud Drive, Google Drive, On My iPhone, USB, SMB — anything in Files.")
                 .font(LWTheme.text(13)).foregroundStyle(LWTheme.secondary)
                 .lwLineBox(13, 18.2).fixedSize(horizontal: false, vertical: true).padding(.bottom, 12)
-            Button { folderPicker = true } label: {
+            Button { pickingAudio = false; picker = true } label: {
                 HStack(spacing: 8) {
                     LWIcon("folder", size: 20)
                     Text(adding ? "Adding music…" : "Choose a folder").lwLineBox(15, 21)
@@ -75,10 +72,9 @@ struct WaveOnboardingView: View {
                     .background(LWTheme.ink).foregroundStyle(LWTheme.onInk)
             }.buttonStyle(LWKeyStyle()).disabled(adding)
             HStack {
-                Button { audioPicker = true } label: { underlined("Pick some files") }.disabled(adding)
+                Button { pickingAudio = true; picker = true } label: { underlined("Pick some files") }.disabled(adding)
                 Spacer(minLength: 12)
-                Button(action: exploreOrTryDemo) { underlined(demoAvailable ? "Try the demo library" : "Explore the library") }
-                    .disabled(adding || checkingDemo)
+                Button(action: onExplore) { underlined("Explore the library") }.disabled(adding)
             }.padding(.top, 4)
             VStack(alignment: .leading, spacing: 0) {
                 Button { driveExpanded.toggle() } label: {
@@ -111,45 +107,15 @@ struct WaveOnboardingView: View {
             .frame(minHeight: 44)
     }
 
-    private func checkDemoAvailability() async {
+    private func loadSongCount() async {
         #if DEBUG
-        if LWReferenceFixture.enabled {
-            // The reference onboarding represents a fresh library before its
-            // bundled demonstration is entered. Keep that exact fixture state.
-            demoAvailable = true
-            checkingDemo = false
-            return
-        }
+        if LWReferenceFixture.enabled { return }
         #endif
-        defer { checkingDemo = false }
         do {
             let count = try await dependencies.songRepository.totalSongCount(query: "")
             guard !Task.isCancelled else { return }
             songCount = count
-            demoAvailable = count == 0
         } catch { self.error = error.localizedDescription }
-    }
-
-    private func exploreOrTryDemo() {
-        #if DEBUG
-        if LWReferenceFixture.enabled { onExplore(); return }
-        #endif
-        guard !adding else { return }
-        guard demoAvailable else { onExplore(); return }
-        adding = true
-        Task {
-            defer { adding = false }
-            do {
-                _ = try await LWDemoLibrary.installIfEmpty(dependencies: dependencies)
-                onExplore()
-            } catch {
-                self.error = error.localizedDescription
-                // A partial import remains a normal source. Do not reimport
-                // over its rows; Explore opens it and Folders offers rescan.
-                let count = try? await dependencies.songRepository.totalSongCount(query: "")
-                if let count { songCount = count; demoAvailable = count == 0 }
-            }
-        }
     }
 
     private func importFiles(_ result: Result<[URL], Error>, play: Bool) {

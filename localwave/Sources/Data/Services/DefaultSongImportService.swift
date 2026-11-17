@@ -89,6 +89,13 @@ public actor DefaultSongImportService: SongImportService {
         try await startImport(paths: paths, onProgress: nil, onFileProgress: onProgress)
     }
 
+    public func reconcileDeletedFiles(sourceId: Int64, rootPathId: Int64) async throws -> Int {
+        let roots = try await sourcePathRepo.getByParentId(sourceId: sourceId, parentPathId: rootPathId)
+        let currentFiles = try await gatherAllFiles(paths: roots)
+        let currentPaths = Set(currentFiles.filter(\.isAudio).map(\.relativePath))
+        return try await songRepo.deleteSongsMissingFromSource(sourceId: sourceId, relativePaths: currentPaths)
+    }
+
     private func startImport(paths: [SourcePath], onProgress: ((Double, URL) async -> Void)?, onFileProgress: ((SongImportProgress) async -> Void)?) async throws {
         // Cancel any existing task
         if let currentTask = currentImportTask {

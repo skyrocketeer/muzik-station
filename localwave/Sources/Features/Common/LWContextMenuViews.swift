@@ -127,8 +127,8 @@ struct LWContextMenuSurface: View {
     private var mobileMenu: some View {
         VStack(spacing: 10) {
             if let preview = request.preview {
-                preview.padding(12).background(LWTheme.paper)
-                    .background { Rectangle().fill(LWTheme.line).padding(-1) }
+                preview.padding(12).background(LWTheme.paper, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(LWTheme.line, lineWidth: 1) }
                     .background { Rectangle().fill(.black.opacity(0.35)).padding(20).blur(radius: 20).offset(y: 20) }
                     .modifier(LWMenuElementEntrance(lift: true, shown: entered)).id("preview-\(renderGeneration)")
             }
@@ -143,7 +143,7 @@ struct LWContextMenuSurface: View {
 
     private func mobileGroup(_ actions: [LWMenuAction], back: Bool = false) -> some View {
         VStack(spacing: 1) {
-            ForEach(actions) { item in
+            ForEach(Array(actions.enumerated()), id: \.element.id) { index, item in
                 Button {
                     if back { item.action() }
                     else if item.submenu != nil { openSubmenu(item) }
@@ -155,17 +155,20 @@ struct LWContextMenuSurface: View {
                         if item.submenu != nil { Text("›").font(LWTheme.text(18)).accessibilityHidden(true) }
                         else if let icon = item.icon { LWIcon(icon, size: 18).accessibilityHidden(true) }
                     }
-                    .padding(.horizontal, 14).frame(minHeight: 46)
+                    .padding(.horizontal, 14).frame(minHeight: 48)
                     .foregroundStyle(item.disabled ? LWTheme.tertiary : item.destructive ? LWTheme.danger : back ? LWTheme.secondary : LWTheme.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(LWMenuRowStyle(background: LWTheme.paper, pressed: LWTheme.panel))
+                .clipShape(rowShape(index: index, count: actions.count))
                 .accessibilityLabel(item.title)
                 .accessibilityHint(item.submenu == nil ? "" : "Opens submenu")
                 .disabled(item.disabled)
             }
-        }.background(LWTheme.line)
-            .background { Rectangle().fill(LWTheme.line).padding(-1) }
+        }
+        .padding(1)
+        .background(LWTheme.paper, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(LWTheme.line, lineWidth: 1) }
     }
 
     private func desktopPanel(_ groups: [LWMenuGroup], open: UUID?) -> some View {
@@ -179,8 +182,8 @@ struct LWContextMenuSurface: View {
                     }
                 }
             }
-        }.padding(5).frame(width: 228).background(LWTheme.paper)
-            .background { Rectangle().fill(LWTheme.line).padding(-1) }
+        }.padding(5).frame(width: 228).background(LWTheme.paper, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(LWTheme.line, lineWidth: 1) }
             .background { Rectangle().fill(.black.opacity(0.35)).padding(12).blur(radius: 20).offset(y: 16) }
     }
 
@@ -214,6 +217,17 @@ struct LWContextMenuSurface: View {
             _ = menuTrail.popLast()
             renderGeneration += 1
         }
+    }
+
+    private func rowShape(index: Int, count: Int) -> UnevenRoundedRectangle {
+        let radius: CGFloat = 12
+        return UnevenRoundedRectangle(
+            topLeadingRadius: index == 0 ? radius : 3,
+            bottomLeadingRadius: index == count - 1 ? radius : 3,
+            bottomTrailingRadius: index == count - 1 ? radius : 3,
+            topTrailingRadius: index == 0 ? radius : 3,
+            style: .continuous
+        )
     }
 }
 

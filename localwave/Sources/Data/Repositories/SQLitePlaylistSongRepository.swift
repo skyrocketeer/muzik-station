@@ -101,7 +101,8 @@ public actor SQLitePlaylistSongRepository: PlaylistSongRepository {
                 fileExtension: row[songsTable[Expression<String?>("fileExtension")]],
                 sampleRate: row[songsTable[Expression<Double?>("sampleRate")]],
                 bitDepth: row[songsTable[Expression<Int?>("bitDepth")]],
-                sourceAvailability: row[songsTable[Expression<String?>("sourceAvailability")]].flatMap(FileAvailability.init(rawValue:))
+                sourceAvailability: row[songsTable[Expression<String?>("sourceAvailability")]].flatMap(FileAvailability.init(rawValue:)),
+                lyrics: row[songsTable[Expression<String?>("lyrics")]]
             )
         }
     }

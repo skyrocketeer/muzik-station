@@ -50,7 +50,7 @@ struct SourceGridCell: View {
                 Spacer()
 
                 if isSyncing {
-                    ProgressView()
+                    LWOrbLoader(size: 34)
                 } else {
                     Button(action: onResync) {
                         Image(systemName: "arrow.clockwise")

@@ -42,6 +42,9 @@ enum LWTheme {
     static let onInk = color(0xF3F3F3, 0x0F0F0F)
     static let wave = color(0xCFCFCF, 0x363636)
     static let danger = Color(red: 210 / 255, green: 26 / 255, blue: 26 / 255)
+    // Fixed contrast in both appearances, matching the Music Station icon.
+    static let action = Color(red: 79 / 255, green: 70 / 255, blue: 229 / 255)
+    static let onAction = Color.white
     static let ink = color(0x111111, 0xEDEDED)
     static let secondary = color(0x585858, 0x9B9B9B)
     static let tertiary = color(0xA0A0A0, 0x5A5A5A)
@@ -193,6 +196,26 @@ struct LWKeyStyle: ButtonStyle {
             .offset(y: configuration.isPressed && !reduceMotion ? 1 : 0)
             .animation(reduceMotion ? nil : LWMotion.springAnimation(configuration.isPressed ? LWMotion.instant : LWMotion.base), value: configuration.isPressed)
             .opacity(configuration.isPressed ? pressedOpacity : 1)
+    }
+}
+
+enum LWActionTone: Equatable { case primary, secondary }
+
+struct LWActionButton<Label: View>: View {
+    let tone: LWActionTone
+    let action: () -> Void
+    @ViewBuilder var label: () -> Label
+
+    var body: some View {
+        Button(action: action) {
+            label()
+                .foregroundStyle(tone == .primary ? LWTheme.onAction : LWTheme.ink)
+                .padding(.horizontal, 18)
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .background(tone == .primary ? LWTheme.action : LWTheme.key2, in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(LWKeyStyle(pressedOpacity: 0.82))
     }
 }
 
@@ -462,6 +485,31 @@ extension EnvironmentValues {
     var lwFolderFilter: Binding<String>? {
         get { self[LWFolderFilterKey.self] }
         set { self[LWFolderFilterKey.self] = newValue }
+    }
+}
+
+struct LWOrbLoader: View {
+    @Environment(\.lwReduceMotion) private var reduceMotion
+    @State private var animate = false
+    var size: CGFloat = 48
+
+    var body: some View {
+        ZStack {
+            Circle().fill(LWTheme.action.opacity(0.18)).frame(width: size, height: size)
+                .blur(radius: size * 0.22).scaleEffect(animate && !reduceMotion ? 1.35 : 0.82)
+            Circle().fill(RadialGradient(colors: [Color.white.opacity(0.95), LWTheme.action, Color(red: 0.36, green: 0.18, blue: 0.78)], center: .init(x: 0.34, y: 0.28), startRadius: 1, endRadius: size * 0.62))
+                .frame(width: size * 0.62, height: size * 0.62)
+                .shadow(color: LWTheme.action.opacity(0.62), radius: size * (animate ? 0.35 : 0.2))
+                .scaleEffect(animate && !reduceMotion ? 1.08 : 0.94)
+        }
+        .frame(width: size, height: size)
+        .accessibilityLabel("Loading")
+        .accessibilityAddTraits(.updatesFrequently)
+        .task {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) { animate = true }
+        }
+        .onChange(of: reduceMotion) { _, reduced in if reduced { animate = false } }
     }
 }
 

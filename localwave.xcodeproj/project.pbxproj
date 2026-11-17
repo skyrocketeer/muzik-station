@@ -45,16 +45,13 @@
 			membershipExceptions = (
 				Info.plist,
 				Sources/Core/Logging/FileLogger.swift,
-				Sources/Core/Platform/AVAudioPlayerAdapter.swift,
-                Sources/Core/Platform/AudioSessionController.swift,
 				Sources/Core/Platform/AudioPlayer.swift,
+				Sources/Core/Platform/AudioSessionController.swift,
+				Sources/Core/Platform/AVAudioPlayerAdapter.swift,
 				Sources/Core/Platform/CLIAudioPlayerAdapter.swift,
 				Sources/Core/Platform/PlatformTypes.swift,
 				Sources/Core/RepeatMode.swift,
 				Sources/Core/Utils.swift,
-				Sources/Domain/Models/Models.swift,
-                Sources/Domain/Models/PlaybackContext.swift,
-				Sources/Domain/Protocols/Protocols.swift,
 				Sources/Data/Providers/DefaultICloudProvider.swift,
 				Sources/Data/Repositories/SQLitePlaylistRepository.swift,
 				Sources/Data/Repositories/SQLitePlaylistSongRepository.swift,
@@ -64,19 +61,22 @@
 				Sources/Data/Repositories/SQLiteSourceRepository.swift,
 				Sources/Data/Repositories/SQLiteUserRepository.swift,
 				Sources/Data/Services/BackgroundFileService.swift,
-                Sources/Data/Services/SourceAccess.swift,
-                Sources/Data/Services/PlaybackFileAccess.swift,
-                Sources/Data/Services/FileAvailabilityService.swift,
-                Sources/Data/Services/SourceFolderPresenter.swift,
-                Sources/Data/Services/WaveformCache.swift,
 				Sources/Data/Services/DefaultPlayerPersistenceService.swift,
 				Sources/Data/Services/DefaultSongImportService.swift,
-				Sources/Data/Services/FLACMetadata.swift,
 				Sources/Data/Services/DefaultSourceImportService.swift,
 				Sources/Data/Services/DefaultSourceService.swift,
 				Sources/Data/Services/DefaultSourceSyncService.swift,
 				Sources/Data/Services/DefaultUserCloudService.swift,
 				Sources/Data/Services/DefaultUserService.swift,
+				Sources/Data/Services/FileAvailabilityService.swift,
+				Sources/Data/Services/FLACMetadata.swift,
+				Sources/Data/Services/PlaybackFileAccess.swift,
+				Sources/Data/Services/SourceAccess.swift,
+				Sources/Data/Services/SourceFolderPresenter.swift,
+				Sources/Data/Services/WaveformCache.swift,
+				Sources/Domain/Models/Models.swift,
+				Sources/Domain/Models/PlaybackContext.swift,
+				Sources/Domain/Protocols/Protocols.swift,
 				Sources/Features/Player/ViewModels/BasePlayerViewModel.swift,
 			);
 			target = 10811E6E2D31CF01008CAD75 /* localwave */;
@@ -103,10 +103,10 @@
 			sourceTree = "<group>";
 		};
 		10UITEST2D31CF02008CAD75 /* localwaveUITests */ = {
-            isa = PBXFileSystemSynchronizedRootGroup;
-            path = localwaveUITests;
-            sourceTree = "<group>";
-        };
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = localwaveUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -238,7 +238,9 @@
 			dependencies = (
 				10811E8B2D31CF02008CAD75 /* PBXTargetDependency */,
 			);
-			fileSystemSynchronizedGroups = (10UITEST2D31CF02008CAD75 /* localwaveUITests */);
+			fileSystemSynchronizedGroups = (
+				10UITEST2D31CF02008CAD75 /* localwaveUITests */,
+			);
 			name = musicappUITests;
 			packageProductDependencies = (
 			);
@@ -485,14 +487,18 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=macosx*]" = MacAppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = localwave/mac.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
-                "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = localwave/mac.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"localwave/Preview Content\"";
-				DEVELOPMENT_TEAM = 7ZH3FYV964;
+				DEVELOPMENT_TEAM = 8KWBDH6PDG;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = localwave/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Music Station";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -503,17 +509,17 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.olegpustovit.localwave;
+				PRODUCT_BUNDLE_IDENTIFIER = com.starboyjimmy.muzikstation;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				SUPPORTS_MACCATALYST = NO;
-                SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
-                MACOSX_DEPLOYMENT_TARGET = 15.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-                "TARGETED_DEVICE_FAMILY[sdk=macosx*]" = 6;
+				"TARGETED_DEVICE_FAMILY[sdk=macosx*]" = 6;
 			};
 			name = Debug;
 		};
@@ -523,14 +529,18 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=macosx*]" = MacAppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = localwave/mac.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
-                "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = localwave/mac.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"localwave/Preview Content\"";
-				DEVELOPMENT_TEAM = 7ZH3FYV964;
+				DEVELOPMENT_TEAM = 8KWBDH6PDG;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = localwave/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Music Station";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -541,17 +551,17 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.olegpustovit.localwave;
+				PRODUCT_BUNDLE_IDENTIFIER = com.starboyjimmy.muzikstation;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				SUPPORTS_MACCATALYST = NO;
-                SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
-                MACOSX_DEPLOYMENT_TARGET = 15.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-                "TARGETED_DEVICE_FAMILY[sdk=macosx*]" = 6;
+				"TARGETED_DEVICE_FAMILY[sdk=macosx*]" = 6;
 			};
 			name = Release;
 		};
@@ -565,15 +575,15 @@
 				DEVELOPMENT_TEAM = 7ZH3FYV964;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.test.test1.musicappTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				SUPPORTS_MACCATALYST = NO;
-                SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
-                MACOSX_DEPLOYMENT_TARGET = 15.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/localwave.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/localwave";
 			};
@@ -589,15 +599,15 @@
 				DEVELOPMENT_TEAM = 7ZH3FYV964;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.test.test1.musicappTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				SUPPORTS_MACCATALYST = NO;
-                SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
-                MACOSX_DEPLOYMENT_TARGET = 15.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/localwave.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/localwave";
 			};
@@ -611,15 +621,15 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 7ZH3FYV964;
 				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.test.test1.musicappUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				SUPPORTS_MACCATALYST = NO;
-                SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
-                MACOSX_DEPLOYMENT_TARGET = 15.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = localwave;
 			};
@@ -633,15 +643,15 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 7ZH3FYV964;
 				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.test.test1.musicappUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				SUPPORTS_MACCATALYST = NO;
-                SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
-                MACOSX_DEPLOYMENT_TARGET = 15.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = localwave;
 			};
@@ -701,7 +711,7 @@
 			repositoryURL = "https://github.com/stephencelis/SQLite.swift";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 0.15.3;
+				minimumVersion = 0.17.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

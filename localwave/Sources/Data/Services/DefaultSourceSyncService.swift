@@ -109,9 +109,12 @@ public actor DefaultSourceSyncService: SourceSyncService {
                 lib.lastSyncedAt = Date()
                 lib.updatedAt = Date()
                 lib.syncError = "\(error)"
-                return try await sourceRepository.updateSource(source: lib)
+                _ = try await sourceRepository.updateSource(source: lib)
             }
-            return nil
+            // Do not let callers continue with a stale source-path index. In
+            // particular, SyncViewState must not import the old paths and
+            // present that as a successful rescan.
+            throw error
         }
     }
 
@@ -151,7 +154,7 @@ public actor DefaultSourceSyncService: SourceSyncService {
             defer { if scoped { scanRoot.stopAccessingSecurityScopedResource() } }
             let folderURL = scanRoot
             guard !LocalWaveGeneratedPaths.contains(folderURL, excludedURLs: excludedURLs) else {
-                throw CustomError.genericError("Choose your original music folder. LocalWave’s generated cache cannot be used as a source.")
+                throw CustomError.genericError("Choose your original music folder. Music Station’s generated cache cannot be used as a source.")
             }
 
             // Now we can scan the folder
