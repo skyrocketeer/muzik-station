@@ -42,7 +42,10 @@ public actor DefaultSourceSyncService: SourceSyncService {
             let result = try await syncDirInner(
                 folderURL: folderURL, onCurrentURL: onCurrentURL, onSetLoading: onSetLoading, resolvedRootURL: root
             )
-            let runId = Int64(Date().timeIntervalSince1970 * 1000)
+            // runId is used as the exact keep-set when stale paths are pruned.
+            // Millisecond timestamps can repeat on fast consecutive scans,
+            // leaving entries from the earlier scan behind.
+            let runId = Int64.random(in: Int64.min...Int64.max)
 
             let itemsToCreate = result?.allItems.map { x in
                 // Bookmark resolution can change /var to /private/var; keep IDs relative to the registered root.
@@ -154,14 +157,25 @@ public actor DefaultSourceSyncService: SourceSyncService {
             defer { if scoped { scanRoot.stopAccessingSecurityScopedResource() } }
             let folderURL = scanRoot
             guard !LocalWaveGeneratedPaths.contains(folderURL, excludedURLs: excludedURLs) else {
-                throw CustomError.genericError("Choose your original music folder. Music Station’s generated cache cannot be used as a source.")
+                throw CustomError.genericError("Choose your original music folder. Power Music Station’s generated cache cannot be used as a source.")
             }
 
-            // Now we can scan the folder
-            if let enumerator = FileManager.default.enumerator(
-                at: folderURL, includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
-                options: [.skipsHiddenFiles, .skipsPackageDescendants]
-            ) {
+            // Coordinate the directory read so File Provider / app-group-backed
+            // folders return their current contents rather than a stale
+            // uncoordinated enumeration.
+            var coordinationError: NSError?
+            var enumerationError: Error?
+            NSFileCoordinator(filePresenter: nil).coordinate(
+                readingItemAt: folderURL, options: .withoutChanges, error: &coordinationError
+            ) { readableRoot in
+                guard let enumerator = FileManager.default.enumerator(
+                    at: readableRoot, includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
+                    options: [.skipsHiddenFiles, .skipsPackageDescendants],
+                    errorHandler: { _, error in enumerationError = error; return false }
+                ) else {
+                    enumerationError = CustomError.genericError("Unable to enumerate the source folder.")
+                    return
+                }
                 for case let file as URL in enumerator {
                     if LocalWaveGeneratedPaths.contains(file, excludedURLs: excludedURLs) {
                         enumerator.skipDescendants()
@@ -170,30 +184,34 @@ public actor DefaultSourceSyncService: SourceSyncService {
                     do {
                         onCurrentURL?(file)
                         let resourceValues = try file.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
+                        guard let relativePath = FileHelper(fileURL: file).relativePath(from: readableRoot) else {
+                            throw CustomError.genericError("Unable to resolve a path inside the source folder.")
+                        }
                         if resourceValues.isDirectory == false {
+                            let sourceURL = folderURL.appendingPathComponent(relativePath)
                             let resultItem = SourceSyncResultItem(
-                                rootURL: folderURL, current: file, isDirectory: false, fileSize: resourceValues.fileSize.map(Int64.init)
+                                rootURL: folderURL, current: sourceURL, isDirectory: false, fileSize: resourceValues.fileSize.map(Int64.init)
                             )
                             if audioExtensions.contains(file.pathExtension.lowercased()) { audioURLs.append(resultItem) }
-                            result[FileHelper(fileURL: file).toString()] = resultItem
+                            result[FileHelper(fileURL: sourceURL).toString()] = resultItem
                         } else if resourceValues.isDirectory == true {
+                            let sourceURL = folderURL.appendingPathComponent(relativePath, isDirectory: true)
                             let resultItem = SourceSyncResultItem(
-                                rootURL: folderURL, current: file, isDirectory: true
+                                rootURL: folderURL, current: sourceURL, isDirectory: true
                             )
-                            result[FileHelper(fileURL: file).toString()] = resultItem
+                            result[FileHelper(fileURL: sourceURL).toString()] = resultItem
                         }
                     } catch {
                         logger.error("Error reading resource values: \(error)")
+                        enumerationError = error
+                        break
                     }
                 }
-                logger.debug("Total audio files found: \(audioURLs.count)")
-                return SourceSyncResult(
-                    allItems: Array(result.values), audioFiles: audioURLs,
-                    totalAudioFiles: audioURLs.count
-                )
-            } else {
-                throw CustomError.genericError("failed to get enumerator")
             }
+            if let coordinationError { throw coordinationError }
+            if let enumerationError { throw enumerationError }
+            logger.debug("Total audio files found: \(audioURLs.count)")
+            return SourceSyncResult(allItems: Array(result.values), audioFiles: audioURLs, totalAudioFiles: audioURLs.count)
         } catch {
             throw CustomError.genericError("error resolving bookmark: \(error)")
         }

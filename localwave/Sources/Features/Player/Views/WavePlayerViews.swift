@@ -95,7 +95,16 @@ struct WaveTransport: View {
                         .disabled(shuffling || (player.currentSong == nil && libraryCount == 0))
                 }
                 .fixedSize(horizontal: false, vertical: true)
-                .background(LWTheme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).fill(LWTheme.panel.opacity(0.78)) }
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                }
+                .shadow(color: LWTheme.action.opacity(player.currentSong == nil ? 0.08 : 0.20), radius: 12, x: 0, y: 4)
                 .padding(.horizontal, 8).padding(.vertical, 5)
                 .overlay(alignment: .topLeading) {
                     GeometryReader { proxy in
@@ -341,12 +350,45 @@ struct WaveNowView: View {
     }
 
     private var currentArtworkLyric: String? {
-        let lines = player.currentSong?.lyrics?.components(separatedBy: .newlines)
+        guard let lyrics = player.currentSong?.lyrics else { return nil }
+        let cues = srtCues(lyrics)
+        if !cues.isEmpty {
+            let elapsed = parsePlaybackSeconds(player.currentTime)
+            return cues.last(where: { $0.start <= elapsed && elapsed < $0.end })?.text
+        }
+        let lines = lyrics.components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty } ?? []
+            .filter { !$0.isEmpty }
         guard !lines.isEmpty else { return nil }
         let index = min(lines.count - 1, Int(player.playbackProgress * Double(lines.count)))
         return lines[index]
+    }
+
+    private func srtCues(_ text: String) -> [(start: Double, end: Double, text: String)] {
+        text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+            .components(separatedBy: "\n\n").compactMap { block in
+            let lines = block.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            guard let timingIndex = lines.firstIndex(where: { $0.contains(" --> ") }) else { return nil }
+            let times = lines[timingIndex].components(separatedBy: " --> ")
+            guard times.count == 2, let start = srtTime(times[0]), let end = srtTime(times[1]) else { return nil }
+            let lyric = lines.dropFirst(timingIndex + 1).joined(separator: " ")
+            guard !lyric.isEmpty else { return nil }
+            return (start, end, lyric)
+        }
+    }
+
+    private func srtTime(_ raw: String) -> Double? {
+        let parts = raw.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".").split(separator: ":")
+        guard parts.count == 3, let hours = Double(parts[0]), let minutes = Double(parts[1]), let seconds = Double(parts[2]) else { return nil }
+        return hours * 3600 + minutes * 60 + seconds
+    }
+
+    private func parsePlaybackSeconds(_ raw: String) -> Double {
+        let parts = raw.split(separator: ":")
+        guard let last = parts.last.flatMap(Double.init) else { return 0 }
+        if parts.count == 2 { return (Double(parts[0]) ?? 0) * 60 + last }
+        if parts.count == 3 { return (Double(parts[0]) ?? 0) * 3600 + (Double(parts[1]) ?? 0) * 60 + last }
+        return last
     }
 
     private var trackInformation: some View {

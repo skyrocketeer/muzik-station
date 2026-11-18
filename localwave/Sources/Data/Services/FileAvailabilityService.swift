@@ -21,6 +21,12 @@ public enum FileAvailabilityService {
         guard FileManager.default.isReadableFile(atPath: url.path) else { return .unknown }
         if knownLocalCopy { return .onDevice }
         let file = url.resolvingSymlinksInPath().standardizedFileURL
+        // Files imported from a local iOS Files provider may be exposed from
+        // the provider's shared AppGroup container. These are ordinary local
+        // files, but iOS can report volumeIsLocal as nil/false for that URL.
+        // Trust the readable AppGroup file unless it is explicitly marked as
+        // ubiquitous or is inside a provider-managed storage location.
+        if isSharedAppGroupContainer(file), !isProviderLocation(file) { return .onDevice }
         guard !isProviderLocation(file), values.volumeIsLocal == true else { return .unknown }
         if values.volumeIsRemovable == true || values.volumeIsInternal == false || file.pathComponents.dropFirst().first == "Volumes" { return .onDevice }
         let manager = FileManager.default
@@ -42,6 +48,16 @@ public enum FileAvailabilityService {
         }
         return (components.contains("AppGroup") || components.contains("PluginKitPlugin")) &&
             (components.contains("FileProviderStorage") || components.contains("File Provider Storage"))
+    }
+
+    private static func isSharedAppGroupContainer(_ url: URL) -> Bool {
+        let components = url.pathComponents
+        guard let containers = components.firstIndex(of: "Containers"),
+              components.count > containers + 3,
+              components[containers + 1] == "Shared",
+              components[containers + 2] == "AppGroup",
+              UUID(uuidString: components[containers + 3]) != nil else { return false }
+        return true
     }
 
     private static func contains(_ file: URL, under root: URL) -> Bool {

@@ -1057,7 +1057,7 @@ struct WaveLibraryView: View {
 
     private var listsBody: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(["Favorites", "Recently Added", "Most Played", "Kept Offline", "Offline", "Never Played"].enumerated()), id: \.element) { index, name in
+            ForEach(Array(["Favorites", "Recently Added", "Most Played"].enumerated()), id: \.element) { index, name in
                 WaveLibraryRouteLink(value: WaveLibraryRoute.automatic(name)) {
                     listLabel(["Recently Added": "Recently added", "Most Played": "Most played", "Kept Offline": "Kept offline", "Offline": "On this device now", "Never Played": "Never played"][name] ?? name, songs: model.automatic(name), automatic: true, divider: name != "Favorites")
                 }.buttonStyle(.plain)
@@ -1881,7 +1881,10 @@ private struct WaveLibrarySongRow: View {
             withAnimation(reduceMotion ? nil : LWMotion.springAnimation(LWMotion.slow)) { swipeOffset = 0 }
         }, including: compact && !model.selecting ? .all : .none)
         .lwContextMenu(enabled: !compact || !model.selecting) { menuRequest() }
-        .modifier(WaveSongDrag(enabled: !compact || !model.selecting, title: song.title, ids: dragSongIDs))
+        // Native drag is reserved for desktop rows and explicit mobile
+        // selection/reorder mode. Enabling it on every compact row installs a
+        // long-press drag recognizer that can steal vertical scroll starts.
+        .modifier(WaveSongDrag(enabled: !compact || model.selecting, title: song.title, ids: dragSongIDs))
         .overlay(alignment: .trailing) { if sharing { ProgressView().frame(width: 44, height: 44).background(LWTheme.paper) } }
         .sheet(item: $sharedFile, onDismiss: {
             if let shareDirectory { try? FileManager.default.removeItem(at: shareDirectory) }
@@ -1921,8 +1924,8 @@ private struct WaveLibrarySongRow: View {
     }
 
     private func selectOrPlay() {
+        if compact && !model.selecting { editMetadata = true; return }
         guard !compact || blockedSource == nil else { return }
-        if compact && !model.selecting { onPlay(); return }
         model.selectionListID = playlistID
         if modifierKeys.contains(.shift), let anchor = model.selectionAnchor,
            let start = selectionOrder.firstIndex(of: anchor), let end = selectionOrder.firstIndex(of: song.uniqueId) {

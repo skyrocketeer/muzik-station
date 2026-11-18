@@ -372,7 +372,7 @@ class SyncViewModel: ObservableObject {
 
     func registerBookmark(_ folderURL: URL) throws {
         guard !LocalWaveGeneratedPaths.contains(folderURL) else {
-            throw CustomError.genericError("Choose your original music folder. Music Station’s generated cache cannot be used as a source.")
+            throw CustomError.genericError("Choose your original music folder. Power Music Station’s generated cache cannot be used as a source.")
         }
         let scoped = folderURL.startAccessingSecurityScopedResource()
         guard scoped || FileManager.default.isReadableFile(atPath: folderURL.path) else {

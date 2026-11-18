@@ -20,7 +20,7 @@
 				<string>public.data</string>
 			</array>
 			<key>UTTypeDescription</key>
-			<string>Music Station queue entry</string>
+			<string>Power Music Station queue entry</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.olegpustovit.localwave.queue-entry</string>
 		</dict>

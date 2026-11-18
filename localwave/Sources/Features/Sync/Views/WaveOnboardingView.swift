@@ -20,7 +20,7 @@ struct WaveOnboardingView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .top) {
-                        Text("Music Station").font(LWTheme.text(13)).lwLineBox(13, 18.2)
+                        Text("Power Music Station").font(LWTheme.text(13)).lwLineBox(13, 18.2)
                         Spacer()
                         Text("v2").font(LWTheme.data(12)).lwLineBox(12, 16.8, data: true)
                     }.foregroundStyle(LWTheme.secondary).frame(minHeight: 18.2)
@@ -34,7 +34,7 @@ struct WaveOnboardingView: View {
                     VStack(spacing: 0) {
                         Rectangle().fill(LWTheme.line).frame(height: 1)
                         step("1", "Choose a folder in Files")
-                        step("2", "Music Station indexes it in the background")
+                        step("2", "Power Music Station indexes it in the background")
                         step("3", "Play at once; cloud songs fetch on play")
                     }.padding(.top, 28)
                     Spacer(minLength: 0)

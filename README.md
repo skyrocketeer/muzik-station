@@ -1,8 +1,8 @@
-# Music Station
+# Power Music Station
 
 A SwiftUI music player for MP3, FLAC and other supported audio files on iPhone, iPad and native macOS. Choose music from Files or Finder. Browse your library by artist, album or song, search it, and play tracks without an Apple Music subscription.
 
-![LocalWave album library, source-folder import and player](https://olegpustovit.com/posts/why-i-built-a-native-mp3-player-in-swiftui/frame_source.webp)
+![Power Music Station album library, source-folder import and player](https://olegpustovit.com/posts/why-i-built-a-native-mp3-player-in-swiftui/frame_source.webp)
 
 *Historical screenshots from the [development article](https://olegpustovit.com/posts/why-i-built-a-native-mp3-player-in-swiftui/). The current instrument-style SwiftUI port follows [redesign version 4](https://artifacts.microapps.space/a/mh0ydns8mzyg), with bundled Host Grotesk/Geist Mono, Canvas matrix numerals and audio-derived waveforms.*
 

@@ -48,7 +48,7 @@ struct WaveFilesView: View {
     private let onSourceRootChange: ((Source?) -> Void)?
     private let onSelectionChange: (([Song]) -> Void)?
     private let onRootBack: (() -> Void)?
-    private let onMusicSelection: ((Result<[URL], Error>, Bool) -> Void)?
+    private let onMusicSelection: ((Result<[URL], Error>, Bool, LWImportCategory) -> Void)?
     @Environment(\.lwLibraryKeyboardCovered) private var keyboardCovered
     @State private var folderStates: [Int64: WaveFolderNavigationState] = [:]
     @State private var skipInitialSourceInspection = false
@@ -63,7 +63,7 @@ struct WaveFilesView: View {
     @State private var picker = false
     @State private var pickingAudio = false
     @State private var addSheet = false
-    @State private var showingSourceItems = false
+    @State private var importCategory: LWImportCategory = .music
     @State private var reconnect: Source?
     @State private var sourceOptions: Source?
     @EnvironmentObject private var presenter: LWSheetPresenter
@@ -79,7 +79,7 @@ struct WaveFilesView: View {
     @ScaledMetric(relativeTo: .body) private var sourceMetaHeight = 18.2
     @ScaledMetric(relativeTo: .body) private var sourceCancelWidth = 64
 
-    init(dependencies: DependencyContainer, addRequest: Int = 0, rootEntryStartedAt: Date? = nil, onDetailChange: ((Bool) -> Void)? = nil, initialNavigationState: WaveFilesNavigationState? = nil, onNavigationStateChange: ((WaveFilesNavigationState) -> Void)? = nil, onSourceRootChange: ((Source?) -> Void)? = nil, onSelectionChange: (([Song]) -> Void)? = nil, onRootBack: (() -> Void)? = nil, onMusicSelection: ((Result<[URL], Error>, Bool) -> Void)? = nil) {
+    init(dependencies: DependencyContainer, addRequest: Int = 0, rootEntryStartedAt: Date? = nil, onDetailChange: ((Bool) -> Void)? = nil, initialNavigationState: WaveFilesNavigationState? = nil, onNavigationStateChange: ((WaveFilesNavigationState) -> Void)? = nil, onSourceRootChange: ((Source?) -> Void)? = nil, onSelectionChange: (([Song]) -> Void)? = nil, onRootBack: (() -> Void)? = nil, onMusicSelection: ((Result<[URL], Error>, Bool, LWImportCategory) -> Void)? = nil) {
         self.dependencies = dependencies
         self.addRequest = addRequest
         self.rootEntryStartedAt = rootEntryStartedAt
@@ -181,15 +181,9 @@ struct WaveFilesView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .top) {
-                        if showingSourceItems {
-                            Button { showingSourceItems = false } label: {
-                                HStack(spacing: 4) { LWIcon("back", size: 18); Text("Folders").lwLineBox(15, 21) }
-                                    .frame(minHeight: 44).padding(.trailing, 8)
-                            }.foregroundStyle(LWTheme.secondary).accessibilityLabel("Back to Folders")
-                        }
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(showingSourceItems ? "My Music" : "Folders").font(LWTheme.text(32).weight(.medium)).tracking(-1.12).lwLineBox(32, 33.6).frame(height: headingHeight)
-                            Text(showingSourceItems ? "\(model.sources.count) folders in your library" : "\(model.sources.count) folders, watched for changes")
+                            Text("Folders").font(LWTheme.text(32).weight(.medium)).tracking(-1.12).lwLineBox(32, 33.6).frame(height: headingHeight)
+                            Text("\(model.sources.count) folders, watched for changes")
                                 .font(LWTheme.text(13)).foregroundStyle(LWTheme.secondary).lwLineBox(13, 18.2)
                         }
                         Spacer()
@@ -203,7 +197,7 @@ struct WaveFilesView: View {
                         Text("Point it at a folder.").font(LWTheme.text(28).weight(.medium))
                         Text("Your files stay where they are. Nothing is uploaded.")
                             .foregroundStyle(LWTheme.secondary)
-                        ForEach(Array(["Choose a folder in Files", "Music Station indexes its audio files", "Play your music from the library"].enumerated()), id: \.offset) { index, title in
+                        ForEach(Array(["Choose a folder in Files", "Power Music Station indexes its audio files", "Play your music from the library"].enumerated()), id: \.offset) { index, title in
                             HStack(spacing: 16) {
                                 Text("\(index + 1)").font(LWTheme.data(13)).foregroundStyle(LWTheme.secondary)
                                 Text(title)
@@ -211,11 +205,25 @@ struct WaveFilesView: View {
                                 .overlay(alignment: .bottom) { Rectangle().fill(LWTheme.line).frame(height: 1) }
                         }
                     }
-                    if !model.sources.isEmpty && !showingSourceItems {
-                        myMusicCard
-                    } else {
-                        ForEach(Array(model.sources.enumerated()), id: \.element.stableId) { index, source in
-                            sourceCard(source).padding(.bottom, 8).modifier(WaveFilesRise(index: index, startedAt: sourceRowsStartedAt))
+                    if !model.sources.isEmpty {
+                        ForEach(LWImportCategory.allCases) { category in
+                            let categorized = model.sources.filter { LWImportCategoryStore.category(for: $0) == category }
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(alignment: .firstTextBaseline) {
+                                    Text(category.title).font(LWTheme.text(18).weight(.medium))
+                                    Spacer()
+                                    Text("\(categorized.count)").font(LWTheme.data(12)).foregroundStyle(LWTheme.secondary)
+                                }.padding(.top, 10).padding(.bottom, 2)
+                                if categorized.isEmpty {
+                                    Text("No \(category.title.lowercased()) folders yet")
+                                        .font(LWTheme.text(13)).foregroundStyle(LWTheme.secondary)
+                                        .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 10)
+                                } else {
+                                    ForEach(Array(categorized.enumerated()), id: \.element.stableId) { index, source in
+                                        sourceCard(source).padding(.bottom, 6).modifier(WaveFilesRise(index: index, startedAt: sourceRowsStartedAt))
+                                    }
+                                }
+                            }.padding(.bottom, 8)
                         }
                     }
                     VStack(alignment: .leading, spacing: 0) {
@@ -237,30 +245,6 @@ struct WaveFilesView: View {
 
                 }.padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 24)
             }
-    }
-
-    private var myMusicCard: some View {
-        Button { showingSourceItems = true } label: {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(LWTheme.action.opacity(0.16))
-                    LWIcon("folder", size: 25).foregroundStyle(LWTheme.action)
-                }.frame(width: 56, height: 56)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("My Music").font(LWTheme.text(17).weight(.medium)).foregroundStyle(LWTheme.ink)
-                    Text("\(model.sources.count) folders · \(model.sources.reduce(0) { $0 + ($1.id.flatMap { sourceStats[$0]?.songs } ?? 0) }) songs")
-                        .font(LWTheme.text(13)).foregroundStyle(LWTheme.secondary)
-                }
-                Spacer(minLength: 0)
-                LWIcon("chev", size: 16).foregroundStyle(LWTheme.secondary)
-            }
-            .padding(14)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(LWTheme.line, lineWidth: 1) }
-            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        }
-        .buttonStyle(WaveSourceCardStyle())
-        .accessibilityLabel("My Music, \(model.sources.count) folders")
     }
 
     private var sourceOptionsPresented: Binding<Bool> {
@@ -509,11 +493,16 @@ struct WaveFilesView: View {
                         LWIcon("close", size: 22).frame(width: 44, height: 44)
                     }.accessibilityLabel("Close").buttonStyle(LWIconButtonStyle()).padding(.trailing, -10)
                 }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 8)
-                Button { addSheet = false; pickingAudio = false; picker = true } label: {
-                    addOption("A folder", detail: "Watched for changes. iCloud Drive, Google Drive, Dropbox, On My iPhone, USB drives, SMB servers.")
-                }.padding(.bottom, 8)
-                Button { addSheet = false; pickingAudio = true; picker = true } label: {
-                    addOption("Some files", detail: "Play them now; they join the library too.")
+                ForEach(LWImportCategory.allCases) { category in
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(category.title.uppercased()).font(LWTheme.data(11).weight(.medium)).foregroundStyle(LWTheme.secondary).tracking(1).padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 6)
+                        Button { beginImport(category, audio: false) } label: {
+                            addOption("Choose a folder", detail: "\(category.detail). Folder stays in its original location.")
+                        }.padding(.bottom, 6)
+                        Button { beginImport(category, audio: true) } label: {
+                            addOption("Choose files", detail: "Add selected audio files to \(category.title.lowercased()).")
+                        }.padding(.bottom, 6)
+                    }
                 }
                 (Text("Google Drive not listed? ").fontWeight(.medium).foregroundStyle(LWTheme.ink) + Text("Install the Google Drive app, then in Files tap Browse → ⋯ → Edit and turn on Google Drive. Songs download from Drive when played.").foregroundStyle(LWTheme.secondary))
                     .font(LWTheme.text(13)).lwLineBox(13, 19.5).padding(15)
@@ -530,9 +519,16 @@ struct WaveFilesView: View {
         }.frame(maxWidth: .infinity, alignment: .leading).padding(16).background(LWTheme.panel).padding(.horizontal, 16)
     }
 
+    private func beginImport(_ category: LWImportCategory, audio: Bool) {
+        importCategory = category
+        pickingAudio = audio
+        addSheet = false
+        picker = true
+    }
+
     private func handleFolders(_ selection: Result<[URL], Error>) {
         if reconnect == nil, let onMusicSelection {
-            onMusicSelection(selection, true)
+            onMusicSelection(selection, true, importCategory)
             return
         }
         do {
@@ -552,6 +548,7 @@ struct WaveFilesView: View {
                 return
             }
             for url in urls {
+                LWImportCategoryStore.set(importCategory, for: url.path)
                 try model.registerBookmark(url)
                 model.createSource(path: url.path)
             }
@@ -564,12 +561,12 @@ struct WaveFilesView: View {
 
     private func handleAudio(_ selection: Result<[URL], Error>) {
         if let onMusicSelection {
-            onMusicSelection(selection, false)
+            onMusicSelection(selection, false, importCategory)
             return
         }
         Task {
             do {
-                let imported = try await dependencies.addMusicURLs(selection.get())
+                let imported = try await dependencies.addMusicURLs(selection.get(), category: importCategory)
                 if let first = imported.first {
                     playerVM.configureQueue(songs: imported, startIndex: 0, context: .selection("Selected files"))
                     playerVM.playSong(first)
@@ -2009,7 +2006,7 @@ struct WaveSettingsView: View {
                     }.contentShape(Rectangle())
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Music Station keeps folder bookmarks and caches songs as needed. Individually added files are copied; library data stays on this device.").lwLineBox(14, 19.6)
+                    Text("Power Music Station keeps folder bookmarks and caches songs as needed. Individually added files are copied; library data stays on this device.").lwLineBox(14, 19.6)
                     NavigationLink { PrivacyView() } label: {
                         Text("About & Privacy").lwLineBox(14, 19.6).underline()
                     }.frame(minHeight: 44, alignment: .leading)

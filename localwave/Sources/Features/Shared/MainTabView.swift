@@ -216,7 +216,7 @@ struct MainTabView: View {
         .modifier(LWNativeMusicImporters(folder: $nativeFolderPicker, audio: $nativeAudioPicker) { result, folders in
             completeNativeMusicPicker(result, folders: folders)
         })
-        .alert("Music Station", isPresented: Binding(get: { dataError != nil || libraryModel.error != nil || (!showNow && (!isWideLayout || !showPanel) && playerVM.playbackError != nil) }, set: { if !$0 { dataError = nil; libraryModel.error = nil; playerVM.playbackError = nil } })) {
+        .alert("Power Music Station", isPresented: Binding(get: { dataError != nil || libraryModel.error != nil || (!showNow && (!isWideLayout || !showPanel) && playerVM.playbackError != nil) }, set: { if !$0 { dataError = nil; libraryModel.error = nil; playerVM.playbackError = nil } })) {
             Button("OK") { dataError = nil; libraryModel.error = nil; playerVM.playbackError = nil }
         } message: { Text(dataError ?? libraryModel.error ?? playerVM.playbackError ?? "") }
         .background {
@@ -479,7 +479,7 @@ struct MainTabView: View {
                 onNavigationStateChange: { state in navigation.update(frameID) { $0.filesState = state } },
                 onSourceRootChange: { source in updateSidebar(source.map { "Source:\($0.stableId)" }, frameID: frameID) },
                 onSelectionChange: { updateSelection($0, frameID: frameID) }, onRootBack: navigation.canGoBack ? rootBack : nil,
-                onMusicSelection: { result, folders in completeNativeMusicPicker(result, folders: folders) })
+                onMusicSelection: { result, folders, category in completeNativeMusicPicker(result, folders: folders, category: category) })
         } else if section.hasPrefix("Source:"), let id = Int64(section.dropFirst(7)), let source = sources.first(where: { $0.id == id }) {
             NavigationStack {
                 WaveFolderView(source: source, dependencies: dependencies, backTitle: rootBackTitle,
@@ -670,7 +670,7 @@ struct MainTabView: View {
         else { nativeAudioPicker = true }
     }
 
-    private func completeNativeMusicPicker(_ result: Result<[URL], Error>, folders: Bool) {
+    private func completeNativeMusicPicker(_ result: Result<[URL], Error>, folders: Bool, category: LWImportCategory = .music) {
         let urls: [URL]
         do { urls = try result.get() }
         catch {
@@ -684,7 +684,7 @@ struct MainTabView: View {
         Task {
             defer { nativeImportInProgress = false }
             do {
-                let imported = try await dependencies.addMusicURLs(urls)
+                let imported = try await dependencies.addMusicURLs(urls, category: category)
                 guard let user = try await dependencies.userCloudService.resolveCurrentICloudUser(), let userID = user.id else {
                     throw CustomError.genericError("The music source is unavailable.")
                 }
@@ -777,9 +777,9 @@ struct MainTabView: View {
     }
     private var navigationDeck: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: dynamicTypeSize.isAccessibilitySize ? 3 : 5), spacing: 0) {
-            ForEach(["Library", "Folders", "Playlists", "Podcasts", "Find"], id: \.self) { label in
-                let route = label == "Playlists" ? "Lists" : label
-                let active = label == "Library" ? ["Library", "Albums", "Artists", "Songs"].contains(section) : section == route || (label == "Playlists" && isListSection) || (label == "Folders" && section == "Add Music")
+            ForEach(["Library", "Import", "Playlists", "Podcasts", "Find"], id: \.self) { label in
+                let route = label == "Playlists" ? "Lists" : label == "Import" ? "Folders" : label
+                let active = label == "Library" ? ["Library", "Albums", "Artists", "Songs"].contains(section) : section == route || (label == "Playlists" && isListSection) || (label == "Import" && section == "Add Music")
                 Button { select(route) } label: {
                     VStack(spacing: 2) {
                         Image(systemName: navigationSymbol(label, active: active))
@@ -791,7 +791,7 @@ struct MainTabView: View {
                             .lineLimit(1).minimumScaleFactor(0.8)
                             .frame(height: 16)
                     }
-                    .foregroundStyle(active ? LWTheme.onInk : LWTheme.secondary)
+                    .foregroundStyle(Color.white)
                     .frame(maxWidth: .infinity).frame(minHeight: dynamicTypeSize.isAccessibilitySize ? 62 : 48)
                     .background {
                         if active {
@@ -807,7 +807,7 @@ struct MainTabView: View {
         .padding(3)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: dynamicTypeSize.isAccessibilitySize ? 28 : 30, style: .continuous))
         .overlay { RoundedRectangle(cornerRadius: dynamicTypeSize.isAccessibilitySize ? 28 : 30, style: .continuous).strokeBorder(Color.white.opacity(0.18), lineWidth: 1) }
-        .padding(.horizontal, 12).padding(.vertical, 4)
+        .padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 0)
         .background(LWTheme.paper.ignoresSafeArea(edges: .bottom))
         .buttonStyle(.plain)
             .animation(reduceMotion ? nil : LWMotion.out(LWMotion.quick), value: section)
@@ -815,7 +815,7 @@ struct MainTabView: View {
     private func navigationSymbol(_ label: String, active: Bool) -> String {
         switch label {
         case "Library": return active ? "square.stack.fill" : "square.stack"
-        case "Folders": return active ? "folder.fill" : "folder"
+        case "Import": return active ? "folder.fill" : "folder"
         case "Playlists": return "music.note.list"
         case "Podcasts": return "dot.radiowaves.left.and.right"
         default: return "magnifyingglass"
@@ -1076,7 +1076,7 @@ private struct WavePodcastsView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "mic.fill")
+            Image(systemName: "dot.radiowaves.left.and.right")
                 .font(.system(size: 30, weight: .medium))
                 .foregroundStyle(LWTheme.action)
                 .frame(width: 72, height: 72)

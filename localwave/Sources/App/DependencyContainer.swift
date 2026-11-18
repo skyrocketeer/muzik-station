@@ -5,6 +5,39 @@ import Foundation
 import os
 import SwiftUI
 
+enum LWImportCategory: String, CaseIterable, Identifiable, Sendable {
+    case music, podcasts, audiobooks
+    var id: String { rawValue }
+    var title: String {
+        switch self { case .music: "Music"; case .podcasts: "Podcasts"; case .audiobooks: "Audiobooks" }
+    }
+    var detail: String {
+        switch self {
+        case .music: "Songs and albums"
+        case .podcasts: "Podcast episodes and shows"
+        case .audiobooks: "Audiobook chapters and recordings"
+        }
+    }
+}
+
+enum LWImportCategoryStore {
+    private static let key = "lwSourceImportCategories"
+    static func set(_ category: LWImportCategory, for path: String) {
+        var values = LocalWavePreferences.current.dictionary(forKey: key) as? [String: String] ?? [:]
+        values[URL(fileURLWithPath: path).standardizedFileURL.path] = category.rawValue
+        LocalWavePreferences.current.set(values, forKey: key)
+    }
+    static func category(for source: Source) -> LWImportCategory {
+        let path = URL(fileURLWithPath: source.dirPath).standardizedFileURL.path
+        let values = LocalWavePreferences.current.dictionary(forKey: key) as? [String: String] ?? [:]
+        if let raw = values[path], let category = LWImportCategory(rawValue: raw) { return category }
+        let name = URL(fileURLWithPath: path).lastPathComponent.lowercased()
+        if name == "podcasts" { return .podcasts }
+        if name == "audiobooks" { return .audiobooks }
+        return .music
+    }
+}
+
 // MARK: - Complete SQLitePlaylistSongRepository implementation
 
 @MainActor
@@ -159,7 +192,7 @@ class DependencyContainer: ObservableObject {
     }
 
     @discardableResult
-    func addMusicURLs(_ urls: [URL]) async throws -> [Song] {
+    func addMusicURLs(_ urls: [URL], category: LWImportCategory = .music) async throws -> [Song] {
         var folders: [URL] = []
         var audio: [URL] = []
         var selectedFiles: [URL] = []
@@ -174,12 +207,13 @@ class DependencyContainer: ObservableObject {
         }
         let selectedFolders = folders
         if !audio.isEmpty {
-            let imported = try await Task.detached(priority: .userInitiated) { try Self.copyAudio(audio) }.value
+            let imported = try await Task.detached(priority: .userInitiated) { try Self.copyAudio(audio, category: category) }.value
             folders.append(imported.folder)
             selectedFiles = imported.files
         }
         waveSyncViewModel.errorMessage = nil
         for folder in folders {
+            LWImportCategoryStore.set(category, for: folder.path)
             try waveSyncViewModel.registerBookmark(folder)
             waveSyncViewModel.createSource(path: folder.path)
         }
@@ -205,8 +239,10 @@ class DependencyContainer: ObservableObject {
         return results.filter { seen.insert($0.songKey).inserted }
     }
 
-    nonisolated static func copyAudio(_ urls: [URL]) throws -> (folder: URL, files: [URL]) {
-            let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Added Files", isDirectory: true)
+    nonisolated static func copyAudio(_ urls: [URL], category: LWImportCategory = .music) throws -> (folder: URL, files: [URL]) {
+            let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let addedFiles = documents.appendingPathComponent("Added Files", isDirectory: true)
+            let folder = category == .music ? addedFiles : addedFiles.appendingPathComponent(category.title, isDirectory: true)
             var copied: [URL] = []
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             for url in urls {

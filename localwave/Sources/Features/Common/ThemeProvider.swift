@@ -42,7 +42,7 @@ enum LWTheme {
     static let onInk = color(0xF3F3F3, 0x0F0F0F)
     static let wave = color(0xCFCFCF, 0x363636)
     static let danger = Color(red: 210 / 255, green: 26 / 255, blue: 26 / 255)
-    // Fixed contrast in both appearances, matching the Music Station icon.
+    // Fixed contrast in both appearances, matching the Power Music Station icon.
     static let action = Color(red: 79 / 255, green: 70 / 255, blue: 229 / 255)
     static let onAction = Color.white
     static let ink = color(0x111111, 0xEDEDED)

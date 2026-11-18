@@ -496,7 +496,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = localwave/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Music Station";
+				INFOPLIST_KEY_CFBundleDisplayName = "Power Music Station";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -538,7 +538,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = localwave/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Music Station";
+				INFOPLIST_KEY_CFBundleDisplayName = "Power Music Station";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
