@@ -27,7 +27,7 @@ struct LWRootNavigationFrame: Identifiable {
         case .album?, .artist?: sidebarRoute = nil
         case .playlist(let id, _)?: sidebarRoute = "List:\(id)"
         case .automatic(let name)?: sidebarRoute = name
-        default: sidebarRoute = ["Find", "Lists", "Settings"].contains(section) ? nil : section
+        default: sidebarRoute = ["Find", "Lists", "Settings"].contains(section) ? nil : section == "Videos" ? "Songs" : section
         }
         if section.hasPrefix("List:") { libraryBoundaryDepth = 1 }
         else {

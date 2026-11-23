@@ -131,7 +131,7 @@ public actor DefaultSourceSyncService: SourceSyncService {
     {
         var audioURLs: [SourceSyncResultItem] = []
         var result = [String: SourceSyncResultItem]()
-        let audioExtensions = AudioFileSupport.extensions
+        let mediaExtensions = MediaFileSupport.extensions
         do {
             let scanRoot: URL
             var scoped = false
@@ -156,6 +156,8 @@ public actor DefaultSourceSyncService: SourceSyncService {
             }
             defer { if scoped { scanRoot.stopAccessingSecurityScopedResource() } }
             let folderURL = scanRoot
+            let selectedFilesOnly = LocalWaveSelectedFilesSource.includesOnlySelectedFiles(at: folderURL)
+            let selectedRelativePaths = LocalWaveSelectedFilesSource.selectedRelativePaths(at: folderURL)
             guard !LocalWaveGeneratedPaths.contains(folderURL, excludedURLs: excludedURLs) else {
                 throw CustomError.genericError("Choose your original music folder. Power Music Station’s generated cache cannot be used as a source.")
             }
@@ -188,13 +190,18 @@ public actor DefaultSourceSyncService: SourceSyncService {
                             throw CustomError.genericError("Unable to resolve a path inside the source folder.")
                         }
                         if resourceValues.isDirectory == false {
+                            guard !selectedFilesOnly || selectedRelativePaths.contains(relativePath) else { continue }
                             let sourceURL = folderURL.appendingPathComponent(relativePath)
                             let resultItem = SourceSyncResultItem(
                                 rootURL: folderURL, current: sourceURL, isDirectory: false, fileSize: resourceValues.fileSize.map(Int64.init)
                             )
-                            if audioExtensions.contains(file.pathExtension.lowercased()) { audioURLs.append(resultItem) }
+                            if mediaExtensions.contains(file.pathExtension.lowercased()) { audioURLs.append(resultItem) }
                             result[FileHelper(fileURL: sourceURL).toString()] = resultItem
                         } else if resourceValues.isDirectory == true {
+                            if selectedFilesOnly && !selectedRelativePaths.contains(where: { $0.hasPrefix(relativePath + "/") }) {
+                                enumerator.skipDescendants()
+                                continue
+                            }
                             let sourceURL = folderURL.appendingPathComponent(relativePath, isDirectory: true)
                             let resultItem = SourceSyncResultItem(
                                 rootURL: folderURL, current: sourceURL, isDirectory: true

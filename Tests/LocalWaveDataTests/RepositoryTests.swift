@@ -17,6 +17,22 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(southAlbum.map(\.artist), ["South"])
     }
 
+    func testAudioAndVideoWithSameMetadataRemainSeparateSongs() async throws {
+        let database = try Connection(.inMemory)
+        let repository = try SQLiteSongRepository(db: database)
+        let audio = Song(id: nil, songKey: 123, artist: "Artist", title: "Title", album: "Album", albumArtist: "Artist", releaseYear: nil, discNumber: nil, trackNumber: nil, coverArtPath: nil, bookmark: nil, pathHash: 1, createdAt: Date(), updatedAt: nil, localFilePath: nil, fileState: .bookmarkOnly, fileExtension: "mp3")
+        let video = Song(id: nil, songKey: 123, artist: "Artist", title: "Title", album: "Album", albumArtist: "Artist", releaseYear: nil, discNumber: nil, trackNumber: nil, coverArtPath: nil, bookmark: nil, pathHash: 2, createdAt: Date(), updatedAt: nil, localFilePath: nil, fileState: .bookmarkOnly, fileExtension: "mp4")
+
+        let importedAudio = try await repository.upsertSong(audio)
+        let importedVideo = try await repository.upsertSong(video)
+
+        XCTAssertNotEqual(importedAudio.id, importedVideo.id)
+        XCTAssertFalse(importedAudio.isVideo)
+        XCTAssertTrue(importedVideo.isVideo)
+        let count = try await repository.totalSongCount(query: "")
+        XCTAssertEqual(count, 2)
+    }
+
     func testSourceRelativeIdentityAndMeasurementsSurviveEditsAndMetadataChanges() async throws {
         let database = try Connection(.inMemory)
         let repository = try SQLiteSongRepository(db: database)

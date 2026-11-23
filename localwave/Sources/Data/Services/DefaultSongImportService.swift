@@ -92,7 +92,7 @@ public actor DefaultSongImportService: SongImportService {
     public func reconcileDeletedFiles(sourceId: Int64, rootPathId: Int64) async throws -> Int {
         let roots = try await sourcePathRepo.getByParentId(sourceId: sourceId, parentPathId: rootPathId)
         let currentFiles = try await gatherAllFiles(paths: roots)
-        let currentPaths = Set(currentFiles.filter(\.isAudio).map(\.relativePath))
+        let currentPaths = Set(currentFiles.filter(\.isMedia).map(\.relativePath))
         return try await songRepo.deleteSongsMissingFromSource(sourceId: sourceId, relativePaths: currentPaths)
     }
 
@@ -328,7 +328,7 @@ public actor DefaultSongImportService: SongImportService {
                     sourceId: p.sourceId, parentPathId: p.pathId
                 )
                 try result.append(contentsOf: await gatherAllFiles(paths: children))
-            } else if p.isAudio {
+            } else if p.isMedia {
                 result.append(p)
             }
         }

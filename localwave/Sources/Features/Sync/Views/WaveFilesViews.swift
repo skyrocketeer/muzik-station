@@ -5,9 +5,16 @@ import UniformTypeIdentifiers
 import LocalWaveDomain
 import LocalWaveCore
 import LocalWaveData
+import PhotosUI
 #if os(macOS)
 import AppKit
 #endif
+
+enum LWMediaImportTypes {
+    static var accepted: [UTType] {
+        [.audio] + VideoFileSupport.extensions.compactMap { UTType(filenameExtension: $0) }
+    }
+}
 
 struct WaveFolderNavigationState {
     struct DirectorySummary { var count: Int; var bytes: Int64 }
@@ -64,6 +71,7 @@ struct WaveFilesView: View {
     @State private var pickingAudio = false
     @State private var addSheet = false
     @State private var importCategory: LWImportCategory = .music
+    @State private var photoVideoItem: PhotosPickerItem?
     @State private var reconnect: Source?
     @State private var sourceOptions: Source?
     @EnvironmentObject private var presenter: LWSheetPresenter
@@ -129,8 +137,12 @@ struct WaveFilesView: View {
                         path: URL(fileURLWithPath: source.dirPath).lastPathComponent, actions: sourceSheetActions(source))
                 }
             }
-            .fileImporter(isPresented: $picker, allowedContentTypes: pickingAudio ? [.audio] : [.folder], allowsMultipleSelection: true) { selection in
+            .fileImporter(isPresented: $picker, allowedContentTypes: pickingAudio ? LWMediaImportTypes.accepted : [.folder], allowsMultipleSelection: true) { selection in
                 if pickingAudio { handleAudio(selection) } else { handleFolders(selection) }
+            }
+            .onChange(of: photoVideoItem) { _, item in
+                guard let item else { return }
+                Task { await importPhotoVideo(item, category: importCategory) }
             }
             .alert("Unable to complete", isPresented: sourceErrorPresented) {
                 Button("OK") { error = nil; model.errorMessage = nil }
@@ -502,6 +514,10 @@ struct WaveFilesView: View {
                         Button { beginImport(category, audio: true) } label: {
                             addOption("Choose files", detail: "Add selected audio files to \(category.title.lowercased()).")
                         }.padding(.bottom, 6)
+                        PhotosPicker(selection: photoVideoSelection(for: category), matching: .videos, preferredItemEncoding: .current) {
+                            addOption("Choose video from Photos", detail: "Import a video saved in your Photos library.")
+                        }
+                        .padding(.bottom, 6)
                     }
                 }
                 (Text("Google Drive not listed? ").fontWeight(.medium).foregroundStyle(LWTheme.ink) + Text("Install the Google Drive app, then in Files tap Browse → ⋯ → Edit and turn on Google Drive. Songs download from Drive when played.").foregroundStyle(LWTheme.secondary))
@@ -524,6 +540,32 @@ struct WaveFilesView: View {
         pickingAudio = audio
         addSheet = false
         picker = true
+    }
+
+    private func photoVideoSelection(for category: LWImportCategory) -> Binding<PhotosPickerItem?> {
+        Binding(get: { photoVideoItem }, set: { item in
+            photoVideoItem = item
+            if item != nil { importCategory = category }
+        })
+    }
+
+    private func importPhotoVideo(_ item: PhotosPickerItem, category: LWImportCategory) async {
+        do {
+            guard let movie = try await item.loadTransferable(type: LWImportedVideo.self) else {
+                throw CustomError.genericError("The selected video could not be read from Photos.")
+            }
+            defer { try? FileManager.default.removeItem(at: movie.url.deletingLastPathComponent()) }
+            addSheet = false
+            let imported = try await dependencies.addMusicURLs([movie.url], category: category)
+            photoVideoItem = nil
+            if let first = imported.first {
+                playerVM.configureQueue(songs: imported, startIndex: 0, context: .selection("Selected video"))
+                playerVM.playSong(first)
+            }
+        } catch {
+            photoVideoItem = nil
+            self.error = error.localizedDescription
+        }
     }
 
     private func handleFolders(_ selection: Result<[URL], Error>) {
@@ -576,6 +618,22 @@ struct WaveFilesView: View {
     }
 
 
+}
+
+private struct LWImportedVideo: Transferable {
+    let url: URL
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: .movie) { received in
+            let temporaryDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+            try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+            var fileName = received.file.lastPathComponent
+            if received.file.pathExtension.isEmpty { fileName += ".mov" }
+            let destination = temporaryDirectory.appendingPathComponent(fileName)
+            try FileManager.default.copyItem(at: received.file, to: destination)
+            return LWImportedVideo(url: destination)
+        }
+    }
 }
 
 @MainActor
@@ -967,7 +1025,7 @@ struct WaveFolderView: View {
                         }
                     }.padding(.horizontal, -16)
                     if !showNonAudio {
-                        let count = model.items.filter { !$0.isDirectory && !$0.isAudio }.count
+                        let count = model.items.filter { !$0.isDirectory && !$0.isMedia }.count
                         if count > 0 {
                             HStack(spacing: 4) {
                                 Text("\(count) non-audio file\(count == 1 ? "" : "s") hidden ·")
@@ -1068,8 +1126,8 @@ struct WaveFolderView: View {
 
     static func sortPaths(_ paths: [SourcePath], songs: [Int64: Song], column: String, ascending: Bool) -> [SourcePath] {
         let folders = paths.filter(\.isDirectory)
-        let files = paths.filter(\.isAudio)
-        let otherFiles = paths.filter { !$0.isDirectory && !$0.isAudio }
+        let files = paths.filter(\.isMedia)
+        let otherFiles = paths.filter { !$0.isDirectory && !$0.isMedia }
         guard !column.isEmpty else { return folders + files + otherFiles }
         return folders + files.sorted { first, second in
             let order: ComparisonResult
@@ -1127,25 +1185,25 @@ struct WaveFolderView: View {
         let row = HStack(spacing: 0) {
             Group {
                 if item.isDirectory { LWIcon("folder", size: 16) }
-                else if !item.isAudio { LWIcon("file", size: 14) }
+                else if !item.isMedia { LWIcon("file", size: 14) }
                 else if current { LWEqualizer(playing: playerVM.isPlaying) }
                 else { Text("\(index + 1 - model.items.filter(\.isDirectory).count)").font(LWTheme.text(13)).lwLineBox(13, 18.2) }
             }.padding(.leading, 32).padding(.trailing, 8).frame(width: widths[0], alignment: .leading).foregroundStyle(LWTheme.secondary)
             Text(item.name).lwLineBox(14, 19.6).lineLimit(1).padding(.horizontal, 8).frame(width: widths[1], alignment: .leading)
-            Text(item.isDirectory ? "Folder · \(summary.count) songs" : item.isAudio ? "\(song?.fileExtension ?? URL(fileURLWithPath: item.name).pathExtension) audio" : "Not audio")
+            Text(item.isDirectory ? "Folder · \(summary.count) songs" : item.isMedia ? "\(song?.fileExtension ?? URL(fileURLWithPath: item.name).pathExtension) \(item.isVideo ? "video" : "audio")" : "Not supported media")
                 .foregroundStyle(LWTheme.secondary).lwLineBox(14, 19.6).lineLimit(1).padding(.horizontal, 8).frame(width: widths[2], alignment: .leading)
             Text(item.isDirectory ? byteLabel(summary.bytes) : (song?.fileSize ?? item.fileSize).map { String(format: "%.1f MB", Double($0) / 1_048_576) } ?? "—")
                 .font(LWTheme.data(12)).foregroundStyle(LWTheme.secondary).lwLineBox(12, 16.8, data: true).padding(.horizontal, 8).frame(width: widths[3], alignment: .leading)
-            ZStack(alignment: .leading) { Color.clear; if item.isAudio { availabilityGlyph(item) } }
+            ZStack(alignment: .leading) { Color.clear; if item.isMedia { availabilityGlyph(item) } }
                 .frame(height: 10).padding(.horizontal, 8).frame(width: widths[4], alignment: .leading)
             Text(song?.duration.map { String(format: "%d:%02d", Int($0) / 60, Int($0) % 60) } ?? "")
                 .font(LWTheme.data(12)).foregroundStyle(LWTheme.secondary).lwLineBox(12, 16.8, data: true).padding(.leading, 8).padding(.trailing, 20).frame(width: widths[5], alignment: .trailing)
         }.font(LWTheme.text(14)).fontWeight(current ? .medium : .regular).frame(minHeight: 38)
             .background(model.selectedPathIds.contains(item.pathId) ? LWTheme.panel2 : hoveredPathID == item.pathId ? LWTheme.panel.opacity(0.6) : Color.clear)
-            .opacity(item.isDirectory || item.isAudio ? 1 : 0.45)
+            .opacity(item.isDirectory || item.isMedia ? 1 : 0.45)
             .overlay(alignment: .bottom) { Rectangle().fill(LWTheme.line).frame(height: 1) }
         return Group {
-            if item.isDirectory || item.isAudio {
+            if item.isDirectory || item.isMedia {
             row.contentShape(Rectangle()).onHover { hoveredPathID = $0 ? item.pathId : nil }
 #if os(iOS)
             .gesture(WaveModifierCapture { modifierKeys = $0 })
@@ -1159,7 +1217,7 @@ struct WaveFolderView: View {
 #endif
             .onTapGesture(count: 2) {
                 if item.isDirectory { navigateIntoFolder(item) }
-                else if item.isAudio { Task { await play(item) } }
+                else if item.isMedia { Task { await play(item) } }
             }
             .onTapGesture { selectPath(item.pathId) }
             .lwContextMenu { folderMenu(item) }
@@ -1169,14 +1227,14 @@ struct WaveFolderView: View {
             .accessibilityElement(children: .combine)
             .accessibilityAction {
                 if item.isDirectory { navigateIntoFolder(item) }
-                else if item.isAudio { Task { await play(item) } }
+                else if item.isMedia { Task { await play(item) } }
             }
             } else { row.accessibilityElement(children: .combine) }
         }
     }
 
     private func selectPath(_ id: Int64) {
-        let order = desktopItems.filter { $0.isDirectory || $0.isAudio }.map(\.pathId)
+        let order = desktopItems.filter { $0.isDirectory || $0.isMedia }.map(\.pathId)
         if modifierKeys.contains(.shift), let selectionAnchor, let start = order.firstIndex(of: selectionAnchor), let end = order.firstIndex(of: id) {
             model.selectedPathIds.formUnion(order[min(start, end)...max(start, end)])
         } else if modifierKeys.contains(.command) {
@@ -1217,12 +1275,12 @@ struct WaveFolderView: View {
             let face = current ? "HostGrotesk-Medium" : "HostGrotesk-Regular"
             let dataFace = current ? "GeistMono-Medium" : "GeistMono-Regular"
             let summary = directorySummaries[item.pathId] ?? DirectorySummary(count: 0, bytes: 0)
-            if item.isAudio { number += 1 }
+            if item.isMedia { number += 1 }
             if item.isDirectory { widths[0] = max(widths[0], 56) }
-            else if !item.isAudio || current { widths[0] = max(widths[0], 54) }
+            else if !item.isMedia || current { widths[0] = max(widths[0], 54) }
             else { widths[0] = max(widths[0], Self.textWidth(String(number), face: face, size: 13 * tableTextScale) + 40) }
             widths[1] = max(widths[1], Self.textWidth(item.name, face: face, size: 14 * tableTextScale) + 16)
-            let kind = item.isDirectory ? "Folder · \(summary.count) songs" : item.isAudio ? "\(song?.fileExtension ?? URL(fileURLWithPath: item.name).pathExtension) audio" : "Not audio"
+            let kind = item.isDirectory ? "Folder · \(summary.count) songs" : item.isMedia ? "\(song?.fileExtension ?? URL(fileURLWithPath: item.name).pathExtension) \(item.isVideo ? "video" : "audio")" : "Not supported media"
             widths[2] = max(widths[2], Self.textWidth(kind, face: face, size: 14 * tableTextScale) + 16)
             let size = item.isDirectory ? byteLabel(summary.bytes) : (song?.fileSize ?? item.fileSize).map { String(format: "%.1f MB", Double($0) / 1_048_576) } ?? "—"
             widths[3] = max(widths[3], Self.textWidth(size, face: dataFace, size: 12 * tableDataScale) + 16)
@@ -1280,7 +1338,7 @@ struct WaveFolderView: View {
     }
 
     @ViewBuilder private func folderRow(_ item: SourcePath) -> some View {
-        if item.isDirectory || item.isAudio { audioFolderRow(item) }
+        if item.isDirectory || item.isMedia { audioFolderRow(item) }
         else {
             HStack(spacing: 12) {
                 LWIcon("file", size: 16).frame(width: 16).foregroundStyle(LWTheme.secondary)
@@ -1303,7 +1361,7 @@ struct WaveFolderView: View {
                 else { availabilityGlyph(item) }
             }.frame(width: 16)
             Button {
-                if selecting && item.isAudio { toggleCompactSong(item) }
+                if selecting && item.isMedia { toggleCompactSong(item) }
                 else if item.isDirectory { navigateIntoFolder(item) }
                 else { Task { await play(item) } }
             } label: {
@@ -1354,7 +1412,7 @@ struct WaveFolderView: View {
         let items = model.items
         var tracks: [Int64: Song] = [:]
         var states: [Int64: FileAvailability] = [:]
-        for item in items where item.isAudio {
+        for item in items where item.isMedia {
             guard !Task.isCancelled else { return }
             if let song = await dependencies.songRepository.getSong(sourceId: item.sourceId, relativePath: item.relativePath) {
                 tracks[item.pathId] = song
@@ -1386,14 +1444,14 @@ struct WaveFolderView: View {
     private var visibleItems: [SourcePath] {
         model.items.filter { item in
             if item.isDirectory { return true }
-            if !item.isAudio { return showNonAudio && availabilityFilter == "All" }
+            if !item.isMedia { return showNonAudio && availabilityFilter == "All" }
             return availabilityFilter == "All" || availability[item.pathId] == (availabilityFilter == "Offline" ? .onDevice : .inCloud)
         }
     }
 
     private func filterCount(_ filter: String) -> Int {
         model.items.filter { item in
-            item.isAudio && (filter == "All" || availability[item.pathId] == (filter == "Offline" ? .onDevice : .inCloud))
+            item.isMedia && (filter == "All" || availability[item.pathId] == (filter == "Offline" ? .onDevice : .inCloud))
         }.count
     }
 
@@ -1410,7 +1468,7 @@ struct WaveFolderView: View {
     }
 
     private func song(for item: SourcePath) async throws -> Song {
-        guard item.isAudio else { throw CustomError.genericError("This file is not supported audio.") }
+        guard item.isMedia else { throw CustomError.genericError("This file is not supported media.") }
         if let saved = await dependencies.songRepository.getSong(sourceId: item.sourceId, relativePath: item.relativePath) { return saved }
         try await dependencies.songImportService.importPaths(paths: [item], onProgress: nil)
         guard let saved = await dependencies.songRepository.getSong(sourceId: item.sourceId, relativePath: item.relativePath) else {
@@ -1435,7 +1493,7 @@ struct WaveFolderView: View {
             let prefix = folder?.relativePath ?? all.first(where: { $0.pathId == model.parentPathId })?.relativePath ?? ""
             let selected = folder == nil && useSelection ? all.filter { model.selectedPathIds.contains($0.pathId) } : []
             let paths = all.filter { path in
-                path.isAudio && (selected.isEmpty
+                path.isMedia && (selected.isEmpty
                     ? (prefix.isEmpty || path.relativePath.hasPrefix(prefix + "/"))
                     : selected.contains { $0.pathId == path.pathId || ($0.isDirectory && path.relativePath.hasPrefix($0.relativePath + "/")) })
             }.sorted { $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending }
@@ -1507,7 +1565,7 @@ struct WaveFolderView: View {
     /// Only persisted audio rows can participate in batch commands.
     static func contextTargets(clicked: SourcePath, orderedPaths: [SourcePath], selected: Set<Int64>,
                                anchor: Int64?, cachedSongs: [Int64: Song], wide: Bool) -> ContextTargets {
-        guard clicked.isAudio else { return ContextTargets(selectedPathIds: selected, anchor: anchor, songs: []) }
+        guard clicked.isMedia else { return ContextTargets(selectedPathIds: selected, anchor: anchor, songs: []) }
         let selectedPaths = wide && !selected.contains(clicked.pathId) ? Set([clicked.pathId]) : selected
         let nextAnchor = wide && !selected.contains(clicked.pathId) ? clicked.pathId : anchor
         let targetPaths = wide ? selectedPaths : Set([clicked.pathId])
@@ -1517,7 +1575,7 @@ struct WaveFolderView: View {
 
     private static func savedAudioSongs(orderedPaths: [SourcePath], selected: Set<Int64>, cachedSongs: [Int64: Song]) -> [Song] {
         var seen = Set<Int64>()
-        return orderedPaths.filter { $0.isAudio && selected.contains($0.pathId) }.compactMap { path -> Song? in
+        return orderedPaths.filter { $0.isMedia && selected.contains($0.pathId) }.compactMap { path -> Song? in
             guard let song = cachedSongs[path.pathId], let id = song.id, seen.insert(id).inserted else { return nil }
             return song
         }
@@ -1583,7 +1641,7 @@ struct WaveFolderView: View {
         publishFolderState()
     }
     private func toggleCompactSong(_ item: SourcePath) {
-        guard item.isAudio, let id = trackSongs[item.pathId]?.id, compactScope.pathIDs.contains(item.pathId) else { return }
+        guard item.isMedia, let id = trackSongs[item.pathId]?.id, compactScope.pathIDs.contains(item.pathId) else { return }
         let aliases = Set(compactScope.pathIDs.filter { trackSongs[$0]?.id == id })
         if !model.selectedPathIds.isDisjoint(with: aliases) { model.selectedPathIds.subtract(aliases) }
         else { model.selectedPathIds.formUnion(aliases) }
@@ -1748,7 +1806,7 @@ struct WaveFolderView: View {
     }
 
     private func folderMenu(_ item: SourcePath) -> LWMenuRequest {
-        if wideLayout, item.isAudio {
+        if wideLayout, item.isMedia {
             let targets = Self.contextTargets(clicked: item, orderedPaths: desktopItems, selected: model.selectedPathIds,
                                               anchor: selectionAnchor, cachedSongs: trackSongs, wide: true)
             model.selectedPathIds = targets.selectedPathIds
@@ -1763,7 +1821,7 @@ struct WaveFolderView: View {
                 LWMenuAction(title: "Play folder", icon: "play", action: { Task { await playFolder(shuffled: false, folder: item) } }),
                 LWMenuAction(title: "Shuffle folder", icon: "shuf", action: { Task { await playFolder(shuffled: true, folder: item) } })
             ]))
-        } else if item.isAudio {
+        } else if item.isMedia {
             groups.append(LWMenuGroup([
                 LWMenuAction(title: "Play", icon: "play", shortcut: "↩", action: { Task { await play(item) } }),
                 LWMenuAction(title: "Play next", icon: "next2", action: {
@@ -1812,11 +1870,56 @@ struct WaveFolderView: View {
             }
             storage.append(LWMenuAction(title: "Share…", icon: "share", disabled: sharing, action: { share(item) }))
             groups.append(LWMenuGroup(storage))
+            if isAddedFilesSource, trackSongs[item.pathId] != nil {
+                groups.append(LWMenuGroup([
+                    LWMenuAction(title: "Delete file from device", icon: "close", destructive: true, action: { confirmRemoveAddedFile(item) })
+                ]))
+            }
         }
         let preview: AnyView?
         if let song = trackSongs[item.pathId] { preview = AnyView(LWMenuTrackPreview(song: song, subtitle: song.artist + " · " + (song.fileExtension ?? "audio"))) }
         else { preview = AnyView(Text(item.name).font(LWTheme.text(17)).padding(16)) }
         return LWMenuRequest(groups: groups, preview: preview)
+    }
+
+    private var isAddedFilesSource: Bool {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].standardizedFileURL
+        let addedFilesRoot = documents.appendingPathComponent("Added Files", isDirectory: true).standardizedFileURL
+        return URL(fileURLWithPath: source.dirPath, isDirectory: true).standardizedFileURL == addedFilesRoot
+    }
+
+    private func confirmRemoveAddedFile(_ item: SourcePath) {
+        guard let song = trackSongs[item.pathId], let songID = song.id, isAddedFilesSource else { return }
+        presenter.present(dialog: LWDialogRequest(
+            title: "Delete “\(item.name)” from this device?",
+            message: "The copied file will be deleted from Added Files and removed from your LocalWave library and playlists. The original file is not affected.",
+            primaryTitle: "Delete file", destructive: true, mobileConfirmation: true,
+            onSubmit: { _ in
+                performSavedAudioAction {
+                    guard let sourceID = source.id else { throw CustomError.genericError("This Added Files source is no longer available.") }
+                    let access = try await dependencies.sourceAccess.fileURL(sourceId: sourceID, relativePath: item.relativePath)
+                    let scoped = access.root.startAccessingSecurityScopedResource()
+                    defer { if scoped { access.root.stopAccessingSecurityScopedResource() } }
+                    guard access.file.standardizedFileURL.path.hasPrefix(access.root.standardizedFileURL.path + "/") else {
+                        throw CustomError.genericError("The selected file is outside Added Files.")
+                    }
+                    var coordinationError: NSError?
+                    var deletionResult: Result<Void, Error>?
+                    NSFileCoordinator().coordinate(writingItemAt: access.file, options: .forDeleting, error: &coordinationError) { coordinatedURL in
+                        deletionResult = Result { try FileManager.default.removeItem(at: coordinatedURL) }
+                    }
+                    if let coordinationError { throw coordinationError }
+                    try deletionResult?.get()
+                    withOfflineCacheLock {
+                        var pins = Set(LocalWavePreferences.current.stringArray(forKey: "lwPinnedSongs") ?? [])
+                        pins.remove(String(songID))
+                        LocalWavePreferences.current.set(Array(pins), forKey: "lwPinnedSongs")
+                    }
+                    dependencies.waveSyncViewModel.resyncSource(source)
+                    await dependencies.waveSyncViewModel.awaitPendingWork()
+                    await model.loadItems()
+                }
+            }))
     }
 
     private func folderAddToListGroups(_ item: SourcePath) -> [LWMenuGroup] {
@@ -1880,7 +1983,7 @@ struct WaveFolderView: View {
         resolvedFolderNames = prefix.split(separator: "/").map(String.init)
         var songs: [Song] = []
         var mapped: [Int64: Song] = [:]
-        for path in allPaths where path.isAudio && (prefix.isEmpty || path.relativePath.hasPrefix(prefix + "/")) {
+        for path in allPaths where path.isMedia && (prefix.isEmpty || path.relativePath.hasPrefix(prefix + "/")) {
             if let song = await dependencies.songRepository.getSong(sourceId: path.sourceId, relativePath: path.relativePath) {
                 songs.append(song)
                 mapped[path.pathId] = song

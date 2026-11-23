@@ -163,6 +163,28 @@ struct WaveTransport: View {
     }
 }
 
+private struct WaveFullscreenVideoView: View {
+    let player: AVPlayer
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+            VideoPlayer(player: player).ignoresSafeArea()
+            Button { dismiss() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(.black.opacity(0.55), in: Circle())
+            }
+            .padding(16)
+            .accessibilityLabel("Close full-screen video")
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
 struct WaveNowView: View {
     @EnvironmentObject private var player: PlayerViewModel
     @EnvironmentObject private var dependencies: DependencyContainer
@@ -174,6 +196,7 @@ struct WaveNowView: View {
     var artmatchEnabled = true
     var closing = false
     @State private var queuePresented = false
+    @State private var videoFullscreen = false
     @State private var appeared = false
     @State private var favoriteBurst = 0
     @State private var error: String?
@@ -258,6 +281,13 @@ struct WaveNowView: View {
         .alert("Playback", isPresented: Binding(get: { error != nil || player.playbackError != nil }, set: { if !$0 { error = nil; player.playbackError = nil } })) {
             Button("OK") { error = nil; player.playbackError = nil }
         } message: { Text(error ?? player.playbackError ?? "") }
+        #if os(iOS)
+        .fullScreenCover(isPresented: $videoFullscreen) {
+            if let engine = player.playbackEngine {
+                WaveFullscreenVideoView(player: engine)
+            }
+        }
+        #endif
     }
 
     private var nowHeader: some View {
@@ -300,7 +330,23 @@ struct WaveNowView: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 ZStack(alignment: .bottom) {
-                    LWArtwork(song: player.currentSong, size: artworkSize(size), matched: compact && artmatchEnabled)
+                    if player.currentSong?.isVideo == true, let engine = player.playbackEngine {
+                        VideoPlayer(player: engine)
+                            .accessibilityLabel("Video playback")
+                            .overlay(alignment: .topTrailing) {
+                                Button { videoFullscreen = true } label: {
+                                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 40, height: 40)
+                                        .background(.black.opacity(0.55), in: Circle())
+                                }
+                                .padding(12)
+                                .accessibilityLabel("Play video full screen")
+                            }
+                    } else {
+                        LWArtwork(song: player.currentSong, size: artworkSize(size), matched: compact && artmatchEnabled)
+                    }
                     if compact, player.isPlaying, player.currentSong?.coverArtPath != nil, let lyric = currentArtworkLyric {
                         Text(lyric)
                             .font(LWTheme.text(16).weight(.semibold))

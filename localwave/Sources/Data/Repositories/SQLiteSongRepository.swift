@@ -317,7 +317,15 @@ public actor SQLiteSongRepository: SongRepository {
         if let sourceId = song.sourceId, let relativePath = song.relativePath {
             sourceRow = try db.pluck(songsTable.filter(colSourceId == sourceId && colRelativePath == relativePath))
         } else { sourceRow = nil }
-        let existingRow = try sourceRow ?? db.pluck(songsTable.filter(colSongKey == song.songKey))
+        // Metadata alone is not a unique identity across media kinds: a music
+        // video may have the same artist, title and album as its audio track.
+        // Continue deduplicating within a kind, while keeping both rows and
+        // their independent source locations and playlist identities.
+        let matchingRows = try db.prepare(songsTable.filter(colSongKey == song.songKey))
+        let metadataMatch = matchingRows.first { row in
+            MediaFileSupport.isVideo(row[colFileExtension]) == song.isVideo
+        }
+        let existingRow = sourceRow ?? metadataMatch
         let now = Date().timeIntervalSince1970
         if let row = existingRow {
             let songId = row[colId]
@@ -408,7 +416,9 @@ public actor SQLiteSongRepository: SongRepository {
 
     public func deleteSong(songId: Int64) async throws {
         try db.transaction {
-            try db.run(playlistSongsTable.filter(colPlaylistSongId == songId).delete())
+            if try playlistSongsTableExists() {
+                try db.run(playlistSongsTable.filter(colPlaylistSongId == songId).delete())
+            }
             try db.run(songsTable.filter(colId == songId).delete())
             try db.run(ftsSongsTable.filter(colFtsSongId == songId).delete())
         }
@@ -426,12 +436,18 @@ public actor SQLiteSongRepository: SongRepository {
         guard !staleIDs.isEmpty else { return 0 }
         try db.transaction {
             for id in staleIDs {
-                try db.run(playlistSongsTable.filter(colPlaylistSongId == id).delete())
+                if try playlistSongsTableExists() {
+                    try db.run(playlistSongsTable.filter(colPlaylistSongId == id).delete())
+                }
                 try db.run(songsTable.filter(colId == id).delete())
                 try db.run(ftsSongsTable.filter(colFtsSongId == id).delete())
             }
         }
         return staleIDs.count
+    }
+
+    private func playlistSongsTableExists() throws -> Bool {
+        try db.scalar("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'playlist_songs' LIMIT 1") != nil
     }
 
     public func deleteAlbum(album: String, artist: String?) async throws {

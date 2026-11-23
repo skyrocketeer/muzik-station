@@ -14,6 +14,37 @@ import Foundation
 @testable import localwave
 
 struct FileHelperTests {
+    @Test func importedFileNameSurvivesSameNameCollision() async throws {
+        let fileManager = FileManager.default
+        let temporaryRoot = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let sourceDirectory = temporaryRoot.appendingPathComponent("Sources", isDirectory: true)
+        let destinationDirectory = temporaryRoot.appendingPathComponent("Added Files", isDirectory: true)
+        try fileManager.createDirectory(at: sourceDirectory, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: temporaryRoot) }
+
+        let fileName = "Track-\(UUID().uuidString).mp4"
+        let firstSourceDirectory = sourceDirectory.appendingPathComponent("first", isDirectory: true)
+        let secondSourceDirectory = sourceDirectory.appendingPathComponent("second", isDirectory: true)
+        try fileManager.createDirectory(at: firstSourceDirectory, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: secondSourceDirectory, withIntermediateDirectories: true)
+        let firstSource = firstSourceDirectory.appendingPathComponent(fileName)
+        let secondSource = secondSourceDirectory.appendingPathComponent(fileName)
+        try Data("first video".utf8).write(to: firstSource)
+        try Data("second video".utf8).write(to: secondSource)
+
+        let firstCopy = try DependencyContainer.copyAudio([firstSource], destinationDirectory: destinationDirectory).files[0]
+        let secondCopy = try DependencyContainer.copyAudio([secondSource], destinationDirectory: destinationDirectory).files[0]
+        let repeatedCopy = try DependencyContainer.copyAudio([secondSource], destinationDirectory: destinationDirectory).files[0]
+        let identicalSource = secondSourceDirectory.appendingPathComponent("renamed-copy.mp4")
+        try Data("second video".utf8).write(to: identicalSource)
+        let identicalCopy = try DependencyContainer.copyAudio([identicalSource], destinationDirectory: destinationDirectory).files[0]
+
+        #expect(firstCopy.lastPathComponent == fileName)
+        #expect(secondCopy.lastPathComponent == fileName)
+        #expect(firstCopy != secondCopy)
+        #expect(secondCopy == repeatedCopy)
+        #expect(identicalCopy == secondCopy)
+    }
     @Test func testToString() async throws {
         let url = URL(fileURLWithPath: "/Users/doggyman/Documents/myFile.txt")
         let helper = FileHelper(fileURL: url)

@@ -120,6 +120,25 @@ public enum AudioFileSupport {
     public static let extensions: Set<String> = ["mp3", "wav", "m4a", "flac", "aac", "aiff", "aif"]
 }
 
+public enum VideoFileSupport {
+    /// Common video containers supported by AVPlayer on iOS.
+    public static let extensions: Set<String> = ["mp4", "mov", "m4v"]
+}
+
+public enum MediaFileSupport {
+    public static var extensions: Set<String> { AudioFileSupport.extensions.union(VideoFileSupport.extensions) }
+
+    public static func isVideo(_ fileExtension: String?) -> Bool {
+        guard let fileExtension else { return false }
+        return VideoFileSupport.extensions.contains(fileExtension.lowercased())
+    }
+
+    public static func isSupported(_ fileExtension: String?) -> Bool {
+        guard let fileExtension else { return false }
+        return extensions.contains(fileExtension.lowercased())
+    }
+}
+
 public struct SourcePath: Sendable {
     public let id: Int64?
     public let sourceId: Int64
@@ -131,6 +150,8 @@ public struct SourcePath: Sendable {
     public let isDirectory: Bool
     public let fileSize: Int64?
     public var isAudio: Bool { !isDirectory && AudioFileSupport.extensions.contains((name as NSString).pathExtension.lowercased()) }
+    public var isVideo: Bool { !isDirectory && VideoFileSupport.extensions.contains((name as NSString).pathExtension.lowercased()) }
+    public var isMedia: Bool { isAudio || isVideo }
 
     public let fileHashSHA256: Data?
     public let runId: Int64
@@ -253,6 +274,7 @@ public struct Song: Sendable, Identifiable, Equatable {
     public let bitDepth: Int?
     public let sourceAvailability: FileAvailability?
     public let lyrics: String?
+    public var isVideo: Bool { MediaFileSupport.isVideo(fileExtension) }
 
     public init(
         id: Int64?,

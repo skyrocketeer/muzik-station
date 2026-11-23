@@ -34,8 +34,14 @@ final class SourceScanExclusionTests: XCTestCase {
         let indexed = try await paths.getByParentId(sourceId: id, parentPathId: nil)
         XCTAssertEqual(indexed.filter { !$0.isDirectory }.map(\.relativePath), ["Collection/Music/original.flac"])
         let cacheSource = try await sources.create(source: Source(id: nil, dirPath: cache.path, pathId: makeURLHash(cache), userId: 1, type: .iCloud, totalPaths: nil, syncError: nil, isCurrent: false, createdAt: Date(), lastSyncedAt: nil, updatedAt: nil, bookmark: cache.bookmarkData(options: sourceBookmarkCreationOptions)))
-        let rejected = try await scanner.syncDir(sourceId: XCTUnwrap(cacheSource.id), folderURL: cache, onCurrentURL: nil, onSetLoading: nil)
-        XCTAssertNotNil(rejected?.syncError)
+        let cacheID = try XCTUnwrap(cacheSource.id)
+        do {
+            _ = try await scanner.syncDir(sourceId: cacheID, folderURL: cache, onCurrentURL: nil, onSetLoading: nil)
+            XCTFail("Scanning a generated cache must fail")
+        } catch {
+            let stored = try await sources.getOne(id: cacheID)
+            XCTAssertNotNil(stored?.syncError)
+        }
     }
 
     func testReadonlyScanAndGeneratedCacheWritesDoNotTriggerRescanStream() async throws {

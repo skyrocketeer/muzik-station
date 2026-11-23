@@ -474,6 +474,7 @@ struct WaveLibraryView: View {
     @EnvironmentObject private var presenter: LWSheetPresenter
     @Environment(\.lwReduceMotion) private var reduceMotion
 
+    private let rootState: WaveLibraryRootState?
     private let rootEntryStartedAt: Date?
     private let onRootStateChange: ((WaveLibraryRootState) -> Void)?
     private let onDetailChange: ((Bool) -> Void)?
@@ -487,6 +488,7 @@ struct WaveLibraryView: View {
     init(dependencies: DependencyContainer, section: String, initialContext: PlaybackContext? = nil, initialQuery: String? = nil, initialShowAll: Bool? = nil, rootState: WaveLibraryRootState? = nil, onRootStateChange: ((WaveLibraryRootState) -> Void)? = nil, rootEntryStartedAt: Date? = nil, onDetailChange: ((Bool) -> Void)? = nil, navigationRequest: WaveLibraryNavigationRequest? = nil, onRootBack: (() -> Void)? = nil, onSidebarRouteChange: ((String?) -> Void)? = nil, initialNavigationPath: [PlaybackContext]? = nil, onNavigationPathChange: (([PlaybackContext]) -> Void)? = nil, rootBackBoundaryDepth: Int? = nil, onSelectionChange: (([Song]) -> Void)? = nil, sharedModel: WaveLibraryModel? = nil) {
         self.dependencies = dependencies
         self.section = section
+        self.rootState = rootState
         self.rootEntryStartedAt = rootEntryStartedAt
         self.onRootStateChange = onRootStateChange
         self.onDetailChange = onDetailChange
@@ -497,7 +499,7 @@ struct WaveLibraryView: View {
         self.onSelectionChange = onSelectionChange
         _query = State(initialValue: initialQuery ?? rootState?.query ?? "")
         _showAllFindSongs = State(initialValue: initialShowAll ?? rootState?.showAllFindSongs ?? false)
-        let explicitMode = ["Albums", "Artists", "Songs"].contains(section) ? section : nil
+        let explicitMode = ["Albums", "Artists", "Songs", "Videos"].contains(section) ? section : section == "Lists" || section == "Playlists" ? "Playlists" : nil
         let detailContext = initialContext.flatMap(Self.route(for:)) != nil
         _mode = State(initialValue: detailContext ? rootState?.mode ?? explicitMode ?? "Albums" : explicitMode ?? rootState?.mode ?? "Albums")
         _albumSort = State(initialValue: rootState?.albumSort ?? "Artist")
@@ -526,9 +528,9 @@ struct WaveLibraryView: View {
     }
 
     private var sort: String {
-        get { activeMode == "Songs" ? songSort : albumSort }
+        get { activeMode == "Songs" || activeMode == "Videos" ? songSort : albumSort }
         nonmutating set {
-            if activeMode == "Songs" { songSort = newValue }
+            if activeMode == "Songs" || activeMode == "Videos" { songSort = newValue }
             else { albumSort = newValue }
         }
     }
@@ -551,6 +553,31 @@ struct WaveLibraryView: View {
             case .list(let id): return .playlist(id: id, name: model.lists.first { $0.id == id }?.name ?? "List")
             case .automatic(let name): return .automatic(name)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func indexRailOverlay(_ proxy: ScrollViewProxy, compact: Bool) -> some View {
+        if compact && isLibrary && activeMode != "Albums" {
+            indexRail(proxy)
+        }
+    }
+
+    @ViewBuilder
+    private func sectionContent(compact: Bool) -> some View {
+        if activeMode == "Playlists" {
+            listsBody
+        } else if section == "Find" {
+            if compact { findResults(compact: true) }
+            else { desktopFindResults }
+        } else if ["Favorites", "Offline", "Kept Offline", "Recently Added", "Recently Played", "Most Played", "Never Played"].contains(section) {
+            automaticContent(section, compact: compact)
+        } else if activeMode == "Albums" {
+            albumGrid(sortedAlbums, compact: compact)
+        } else if activeMode == "Artists" {
+            artistRows(model.artists)
+        } else {
+            songRows(sortedSongs, compact: compact, showsEmptyMessage: activeMode != "Videos" && activeMode != "Songs")
         }
     }
 
@@ -602,22 +629,12 @@ struct WaveLibraryView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         if section == "Find" { if compact { findHeader } }
-                        else if section == "Lists" { listsHeader }
                         else if !["Favorites", "Offline", "Kept Offline", "Recently Added", "Recently Played", "Most Played", "Never Played"].contains(section) { libraryHeader(compact: compact) }
 
-                        if section == "Lists" { listsBody }
-                        else if section == "Find" {
-                            if compact { findResults(compact: true) }
-                            else { desktopFindResults }
-                        }
-                        else if ["Favorites", "Offline", "Kept Offline", "Recently Added", "Recently Played", "Most Played", "Never Played"].contains(section) {
-                            automaticContent(section, compact: compact)
-                        } else if activeMode == "Albums" { albumGrid(sortedAlbums, compact: compact) }
-                        else if activeMode == "Artists" { artistRows(model.artists) }
-                        else { songRows(sortedSongs, compact: compact) }
+                        sectionContent(compact: compact)
 
-                        if model.songs.isEmpty && !model.loading && section != "Lists" {
-                            Text("Your music starts with a folder. Add music in Folders to build your library.")
+                        if songsForMode.isEmpty && !model.loading && (activeMode == "Videos" || activeMode == "Songs") {
+                            Text(activeMode == "Videos" ? "No videos here yet. Add videos from Files or Photos." : "Your music starts with a folder. Add music in Folders to build your library.")
                                 .foregroundStyle(LWTheme.secondary).padding(24)
                         }
                         if model.loading && model.songs.isEmpty { LWOrbLoader(size: 52).frame(maxWidth: .infinity).padding(28) }
@@ -625,7 +642,7 @@ struct WaveLibraryView: View {
                     .padding(.bottom, compact ? 24 : 0)
                 }
                 .background(LWTheme.paper)
-                .overlay(alignment: .trailing) { if compact && isLibrary && activeMode != "Albums" { indexRail(proxy) } }
+                .overlay(alignment: .trailing) { indexRailOverlay(proxy, compact: compact) }
                 .onChange(of: keyboardScrollTarget) { _, id in
                     if let id { withAnimation(reduceMotion ? nil : LWMotion.out(LWMotion.quick)) { proxy.scrollTo("song-" + String(id), anchor: .center) } }
                 }
@@ -646,9 +663,13 @@ struct WaveLibraryView: View {
             .onChange(of: navigationRequest?.id) { _, _ in
                 if let navigationRequest { openRequestedContext(navigationRequest.context) }
             }
+            .onChange(of: rootState?.mode) { _, value in
+                guard let value, ["Albums", "Artists", "Songs", "Videos", "Playlists"].contains(value) else { return }
+                mode = value
+            }
             .onChange(of: section) { _, value in
                 findFocused = false
-                if ["Albums", "Artists", "Songs"].contains(value) { mode = value }
+                if ["Albums", "Artists", "Songs", "Videos"].contains(value) { mode = value }
                 let initial: [WaveLibraryRoute]
                 if value.hasPrefix("List:"), let id = Int64(value.dropFirst(5)) { initial = [.list(id)] }
                 else { initial = [] }
@@ -713,7 +734,7 @@ struct WaveLibraryView: View {
         })])]
     }
 
-    private var isLibrary: Bool { ["Library", "Albums", "Artists", "Songs"].contains(section) }
+    private var isLibrary: Bool { ["Library", "Albums", "Artists", "Songs", "Videos", "Lists", "Playlists"].contains(section) }
     private var activeMode: String { isLibrary ? mode : section }
     private var sidebarRoute: String? {
         if let route = path.last {
@@ -745,12 +766,20 @@ struct WaveLibraryView: View {
         return String(format: "%.1f %@", megabytes >= 1024 ? megabytes / 1024 : megabytes, megabytes >= 1024 ? "GB" : "MB")
     }
 
-    private var sortOptions: [String] { activeMode == "Songs" ? ["Title", "Artist", "Album", "Added", "Duration"] : ["Artist", "Title", "Year", "Added"] }
+    private var sortOptions: [String] { activeMode == "Songs" || activeMode == "Videos" ? ["Title", "Artist", "Album", "Added", "Duration"] : ["Artist", "Title", "Year", "Added"] }
     private func sortLabel(_ value: String) -> String { value == "Added" ? "Recently added" : value }
 
+    private var songsForMode: [Song] {
+        switch activeMode {
+        case "Songs": return model.songsInOriginalOrder.filter { !$0.isVideo }
+        case "Videos": return model.songsInOriginalOrder.filter(\.isVideo)
+        default: return model.songsInOriginalOrder
+        }
+    }
+
     private var sortedSongs: [Song] {
-        if wideLayout { return model.songsInOriginalOrder }
-        return model.songsInOriginalOrder.sorted {
+        if wideLayout { return songsForMode }
+        return songsForMode.sorted {
             if sort == "Artist" { return (waveArtistSortName($0.artist), $0.album, $0.trackNumber ?? 0) < (waveArtistSortName($1.artist), $1.album, $1.trackNumber ?? 0) }
             if sort == "Album" { return ($0.album, $0.trackNumber ?? 0) < ($1.album, $1.trackNumber ?? 0) }
             if sort == "Duration" { return ($0.duration ?? .infinity) < ($1.duration ?? .infinity) }
@@ -768,23 +797,26 @@ struct WaveLibraryView: View {
                 WaveMobileSelectionHeader(model: model, songs: selectionScope, title: isLibrary ? "Library" : section, inset: false)
             } else {
             HStack(alignment: .top) {
-                Text(isLibrary ? (compact ? "Library" : activeMode) : section).font(LWTheme.text(compact ? 32 : 34).weight(.medium)).tracking(compact ? -1.12 : -0.85).lwLineBox(compact ? 32 : 34, compact ? 33.6 : 34)
+                Text(isLibrary ? (compact ? (activeMode == "Playlists" ? "Playlists" : "Library") : activeMode) : section).font(LWTheme.text(compact ? 32 : 34).weight(.medium)).tracking(compact ? -1.12 : -0.85).lwLineBox(compact ? 32 : 34, compact ? 33.6 : 34)
                 Spacer()
                 if isLibrary {
                     Button { NotificationCenter.default.post(name: Notification.Name("LWCommand"), object: "Settings") } label: { LWIcon("set", size: 22).frame(width: 44, height: 44) }.buttonStyle(LWIconButtonStyle()).padding(.trailing, -10).accessibilityLabel("Settings")
                 }
-                if !model.songs.isEmpty && (!compact || !isLibrary) {
+                if !songsForMode.isEmpty && (!compact || !isLibrary) {
                     Button(model.selecting ? "Done" : "Select") { model.selecting.toggle(); model.selected = []; model.selectionListID = nil }.font(LWTheme.text(13))
-                    Button { play(model.songs.shuffled()) } label: { Label("Shuffle all", systemImage: "shuffle").font(LWTheme.text(13)) }
+                    Button { play(songsForMode.shuffled()) } label: { Label(activeMode == "Videos" ? "Shuffle videos" : "Shuffle all", systemImage: "shuffle").font(LWTheme.text(13)) }
                 }
             }.frame(minHeight: 44)
             }
-            if isLibrary {
+            if isLibrary && activeMode == "Playlists" {
+                Text("\(model.lists.count + 3) collections in your library")
+                    .font(LWTheme.text(14)).foregroundStyle(LWTheme.secondary)
+            } else if isLibrary {
                 (dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(alignment: .bottom, spacing: 10))) {
-                    MatrixText(text: String(model.songs.count), height: countHeight, unlit: false)
+                    MatrixText(text: String(songsForMode.count), height: countHeight, unlit: false)
                         .overlay(alignment: .topTrailing) { if playerVM.isPlaying { Rectangle().fill(LWTheme.signal).frame(width: 9, height: 9).offset(x: 14) } }
-                        .accessibilityLabel("Songs in library").accessibilityValue(String(model.songs.count)).accessibilityIdentifier("library-song-count")
-                    Text("songs").font(LWTheme.text(15)).lwLineBox(15, 21).padding(.bottom, 2).padding(.leading, playerVM.isPlaying ? 14 : 0)
+                        .accessibilityLabel(activeMode == "Videos" ? "Videos in library" : "Songs in library").accessibilityValue(String(songsForMode.count)).accessibilityIdentifier("library-song-count")
+                    Text(activeMode == "Videos" ? "videos" : "songs").font(LWTheme.text(15)).lwLineBox(15, 21).padding(.bottom, 2).padding(.leading, playerVM.isPlaying ? 14 : 0)
                     if !dynamicTypeSize.isAccessibilitySize { Spacer() }
                     VStack(alignment: .trailing, spacing: 0) {
                         Text("\(model.albums.count) albums · \(librarySize)").lwLineBox(13, 19.5)
@@ -806,28 +838,31 @@ struct WaveLibraryView: View {
         let layout = vertical ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0)) : AnyLayout(HStackLayout(spacing: 20))
         return layout {
                 if isLibrary {
-                    ForEach(["Albums", "Artists", "Songs"], id: \.self) { item in
+                    ForEach(["Albums", "Artists", "Songs", "Videos", "Playlists"], id: \.self) { item in
                         Button {
                             navigationMotion.reset()
                             mode = item
                         } label: {
                             HStack(spacing: 6) {
                                 Text(item).lwLineBox(15, 21)
-                                Text(String(item == "Albums" ? model.albums.count : item == "Artists" ? model.artists.count : model.songs.count)).font(LWTheme.text(13)).lwLineBox(13, 18.2).foregroundStyle(LWTheme.secondary)
+                                if item != "Playlists" {
+                                    let count = item == "Albums" ? model.albums.count : item == "Artists" ? model.artists.count : item == "Videos" ? model.songs.filter(\.isVideo).count : model.songs.filter { !$0.isVideo }.count
+                                    Text(String(count)).font(LWTheme.text(13)).lwLineBox(13, 18.2).foregroundStyle(LWTheme.secondary)
+                                }
                             }.fixedSize(horizontal: true, vertical: false).font(LWTheme.text(15))
-                                .foregroundStyle(mode == item ? LWTheme.ink : LWTheme.secondary)
+                                .foregroundStyle(activeMode == item ? LWTheme.ink : LWTheme.secondary)
                                 .frame(minHeight: 44)
-                                .overlay(alignment: .bottom) { if mode == item { Rectangle().fill(LWTheme.ink).frame(height: 2).offset(y: 1) } }
-                        }.accessibilityIdentifier("library-mode-" + item).accessibilityAddTraits(mode == item ? .isSelected : [])
+                                .overlay(alignment: .bottom) { if activeMode == item { Rectangle().fill(LWTheme.ink).frame(height: 2).offset(y: 1) } }
+                        }.accessibilityIdentifier("library-mode-" + item).accessibilityAddTraits(activeMode == item ? .isSelected : [])
                     }
                 }
                 if !vertical { Spacer(minLength: 0) }
-                if activeMode != "Artists" {
+                if activeMode != "Artists" && activeMode != "Playlists" {
                 LWMenuButton(request: { sortMenuRequest }) {
                     Text(sortLabel(sort) + " ↓").font(LWTheme.text(14)).lwLineBox(14, 19.6).foregroundStyle(LWTheme.ink).fixedSize()
                 }
-                .accessibilityAction(named: "Select songs") { model.selecting.toggle(); model.selected = []; model.selectionListID = nil }
-                .accessibilityAction(named: "Shuffle all") { play(model.songs.shuffled(), context: .library) }
+                .accessibilityAction(named: activeMode == "Videos" ? "Select videos" : "Select songs") { model.selecting.toggle(); model.selected = []; model.selectionListID = nil }
+                .accessibilityAction(named: activeMode == "Videos" ? "Shuffle videos" : "Shuffle all") { play(songsForMode.shuffled(), context: .library) }
                 }
         }.frame(minWidth: max(0, contentWidth - 32), alignment: .leading)
     }
@@ -844,8 +879,25 @@ struct WaveLibraryView: View {
     private var desktopLibraryHeader: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(activeMode).font(LWTheme.text(34).weight(.medium)).tracking(-0.85).lwLineBox(34, 34).padding(.top, 28)
-            Text(activeMode == "Songs" ? "Click a header to sort. Double-click or Return plays." : activeMode == "Artists" ? "Sorted ignoring “The”" : "\(model.songs.count) songs across \(model.sourceCount) sources · \(librarySize)")
+            Text(activeMode == "Songs" || activeMode == "Videos" ? "Click a header to sort. Double-click or Return plays." : activeMode == "Artists" ? "Sorted ignoring “The”" : activeMode == "Playlists" ? "Your playlists and automatic collections" : "\(model.songs.count) songs across \(model.sourceCount) sources · \(librarySize)")
                 .font(LWTheme.text(14)).lwLineBox(14, 19.6).foregroundStyle(LWTheme.secondary).padding(.top, 6).padding(.bottom, 18)
+            HStack(spacing: 20) {
+                ForEach(["Albums", "Artists", "Songs", "Videos", "Playlists"], id: \.self) { item in
+                    Button {
+                        navigationMotion.reset()
+                        mode = item
+                    } label: {
+                        Text(item).font(LWTheme.text(14)).lwLineBox(14, 19.6)
+                            .foregroundStyle(activeMode == item ? LWTheme.ink : LWTheme.secondary)
+                            .frame(minHeight: 36)
+                            .overlay(alignment: .bottom) {
+                                if activeMode == item { Rectangle().fill(LWTheme.ink).frame(height: 2).offset(y: 1) }
+                            }
+                    }
+                    .accessibilityIdentifier("library-mode-" + item)
+                    .accessibilityAddTraits(activeMode == item ? .isSelected : [])
+                }
+            }.padding(.bottom, 12)
             if activeMode == "Albums" {
                 HStack(spacing: 8) {
                     desktopSorts
@@ -1563,11 +1615,11 @@ struct WaveLibraryView: View {
     private var keyboardCommands: some View {
         Group {
             Button("Back in library", action: popPage).keyboardShortcut("[", modifiers: .command).disabled(!canGoBack)
-            Button("Select all songs") {
+            Button(activeMode == "Videos" ? "Select all videos" : "Select all songs") {
                 model.selecting = true
                 model.selected = Set(selectionScope.map(\.uniqueId))
                 if case .list(let id)? = path.last { model.selectionListID = id }
-            }.keyboardShortcut("a", modifiers: .command).disabled((isLibrary && activeMode != "Songs" && path.isEmpty) || (section == "Find" && !wideLayout && !model.selecting))
+            }.keyboardShortcut("a", modifiers: .command).disabled((isLibrary && activeMode != "Songs" && activeMode != "Videos" && path.isEmpty) || (section == "Find" && !wideLayout && !model.selecting))
             Button("Previous song selection") { moveSelection(by: -1) }.keyboardShortcut(.upArrow, modifiers: []).disabled(!wideLayout || !model.selecting)
             Button("Next song selection") { moveSelection(by: 1) }.keyboardShortcut(.downArrow, modifiers: []).disabled(!wideLayout || !model.selecting)
             Button("Extend selection up") { moveSelection(by: -1, extend: true) }.keyboardShortcut(.upArrow, modifiers: .shift).disabled(!wideLayout || !model.selecting)
@@ -1846,7 +1898,7 @@ private struct WaveLibrarySongRow: View {
         .disabled(compact && blockedSource != nil)
         .onHover { hovering = $0 }
 #if os(iOS)
-        .gesture(WaveModifierCapture { modifierKeys = $0 })
+        .modifier(WaveModifierCaptureIfNeeded(enabled: !compact) { modifierKeys = $0 })
 #else
         .simultaneousGesture(TapGesture().onEnded {
             var modifiers: EventModifiers = []
@@ -2025,6 +2077,17 @@ private struct WaveSongDrag: ViewModifier {
 }
 
 #if os(iOS)
+private struct WaveModifierCaptureIfNeeded: ViewModifier {
+    let enabled: Bool
+    let changed: (EventModifiers) -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if enabled { content.gesture(WaveModifierCapture(changed: changed)) }
+        else { content }
+    }
+}
+
 struct WaveModifierCapture: UIGestureRecognizerRepresentable {
     var changed: (EventModifiers) -> Void
 

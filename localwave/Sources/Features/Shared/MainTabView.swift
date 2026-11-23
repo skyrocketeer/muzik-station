@@ -541,7 +541,7 @@ struct MainTabView: View {
     private var rootBackTitle: String {
         guard let previous = navigation.previous.last else { return "Folders" }
         if let context = previous.playbackDestination { return context.title }
-        if ["Library", "Albums", "Artists", "Songs"].contains(previous.section) { return "Library" }
+        if ["Library", "Albums", "Artists", "Songs", "Videos"].contains(previous.section) { return "Library" }
         return previous.section
     }
     private func rootBack() {
@@ -588,7 +588,7 @@ struct MainTabView: View {
         libraryModel.selectionAnchor = nil; libraryModel.selectionListID = nil
     }
     private func pushDesktopFrame(_ next: LWRootNavigationFrame, animate: Bool = true) {
-        if ["Library", "Albums", "Artists", "Songs"].contains(section), playbackDestination == nil {
+        if ["Library", "Albums", "Artists", "Songs", "Videos", "Lists", "Playlists"].contains(section), playbackDestination == nil {
             navigation.update(navigation.current.id) { $0.section = libraryRootState.mode }
         }
         navigation.push(next)
@@ -724,11 +724,13 @@ struct MainTabView: View {
         if isWideLayout { showCommands = true }
         else { closeNow(); select("Find") }
     }
-    private func select(_ next: String) {
-        if next == "Add Music" && isWideLayout { openNativeMusicPicker(folder: false); return }
-        if next == "New List" { requestNewList(); return }
+    private func select(_ requested: String) {
+        if requested == "Add Music" && isWideLayout { openNativeMusicPicker(folder: false); return }
+        if requested == "New List" { requestNewList(); return }
+        if requested == "Lists" { libraryRootState.mode = "Playlists" }
+        let next = requested == "Lists" ? "Library" : requested
         if isWideLayout { pushDesktopFrame(LWRootNavigationFrame(section: next)); dismissNowForNavigation(); return }
-        let sameLibrary = next == "Library" && ["Library", "Albums", "Artists", "Songs"].contains(section)
+        let sameLibrary = next == "Library" && ["Library", "Albums", "Artists", "Songs", "Videos", "Lists", "Playlists"].contains(section)
         let changed = (!sameLibrary && section != next) || playbackDestination != nil || showSettings || libraryHasDetail
         if changed {
             navigation.reset(LWRootNavigationFrame(section: next))
@@ -776,10 +778,10 @@ struct MainTabView: View {
         showSettings = false
     }
     private var navigationDeck: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: dynamicTypeSize.isAccessibilitySize ? 3 : 5), spacing: 0) {
-            ForEach(["Library", "Import", "Playlists", "Podcasts", "Find"], id: \.self) { label in
-                let route = label == "Playlists" ? "Lists" : label == "Import" ? "Folders" : label
-                let active = label == "Library" ? ["Library", "Albums", "Artists", "Songs"].contains(section) : section == route || (label == "Playlists" && isListSection) || (label == "Import" && section == "Add Music")
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: dynamicTypeSize.isAccessibilitySize ? 3 : 4), spacing: 0) {
+            ForEach(["Library", "Import", "Podcasts", "Find"], id: \.self) { label in
+                let route = label == "Import" ? "Folders" : label
+                let active = label == "Library" ? ["Library", "Albums", "Artists", "Songs", "Videos", "Lists", "Playlists"].contains(section) || isListSection : section == route || (label == "Import" && section == "Add Music")
                 Button { select(route) } label: {
                     VStack(spacing: 2) {
                         Image(systemName: navigationSymbol(label, active: active))
@@ -1104,7 +1106,7 @@ private struct LWNativeMusicImporters: ViewModifier {
     let complete: (Result<[URL], Error>, Bool) -> Void
     func body(content: Content) -> some View {
         content.fileImporter(isPresented: $folder, allowedContentTypes: [.folder], allowsMultipleSelection: true) { complete($0, true) }
-            .fileImporter(isPresented: $audio, allowedContentTypes: [.audio], allowsMultipleSelection: true) { complete($0, false) }
+            .fileImporter(isPresented: $audio, allowedContentTypes: LWMediaImportTypes.accepted, allowsMultipleSelection: true) { complete($0, false) }
     }
 }
 

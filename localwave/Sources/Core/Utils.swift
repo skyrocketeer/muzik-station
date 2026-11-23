@@ -6,6 +6,36 @@ import SQLite
 public let subsystem = "com.snowbear.localwave"
 public let schemaVersion = 29
 
+public enum LocalWaveSelectedFilesSource {
+    private static let key = "lwSelectedFilesSourcePaths"
+
+    public static func includesOnlySelectedFiles(at root: URL, preferences: UserDefaults = LocalWavePreferences.current) -> Bool {
+        let path = root.standardizedFileURL.path
+        return preferences.dictionary(forKey: key)?[path] != nil
+    }
+
+    public static func selectedRelativePaths(at root: URL, preferences: UserDefaults = LocalWavePreferences.current) -> Set<String> {
+        let path = root.standardizedFileURL.path
+        let values = preferences.dictionary(forKey: key) as? [String: [String]]
+        return Set(values?[path] ?? [])
+    }
+
+    public static func beginSelectionOnly(at root: URL, preferences: UserDefaults = LocalWavePreferences.current) {
+        let path = root.standardizedFileURL.path
+        guard preferences.dictionary(forKey: key)?[path] == nil else { return }
+        var values = preferences.dictionary(forKey: key) as? [String: [String]] ?? [:]
+        values[path] = []
+        preferences.set(values, forKey: key)
+    }
+
+    public static func add(_ relativePaths: [String], at root: URL, preferences: UserDefaults = LocalWavePreferences.current) {
+        let path = root.standardizedFileURL.path
+        var values = preferences.dictionary(forKey: key) as? [String: [String]] ?? [:]
+        values[path] = Array(Set(values[path] ?? []).union(relativePaths)).sorted()
+        preferences.set(values, forKey: key)
+    }
+}
+
 public enum LocalWaveGeneratedPaths {
     public static var urls: [URL] {
         let manager = FileManager.default

@@ -47,7 +47,7 @@ struct WaveOnboardingView: View {
         .background(LWTheme.paper).foregroundStyle(LWTheme.ink).buttonStyle(.plain)
         .accessibilityElement(children: .contain).accessibilityAddTraits(.isModal)
         .task { await loadSongCount() }
-        .fileImporter(isPresented: $picker, allowedContentTypes: pickingAudio ? [.audio] : [.folder], allowsMultipleSelection: true) { importFiles($0, play: pickingAudio) }
+        .fileImporter(isPresented: $picker, allowedContentTypes: pickingAudio ? LWMediaImportTypes.accepted : [.folder], allowsMultipleSelection: true) { importFiles($0, play: pickingAudio) }
         .alert("Unable to add music", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK") { error = nil }
         } message: { Text(error ?? "") }

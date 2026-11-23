@@ -6,6 +6,20 @@ import LocalWaveCore
 @testable import LocalWaveData
 
 final class SourceScanTests: XCTestCase {
+    func testAddedFilesSourceRemembersOnlyExplicitlyImportedPaths() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let suiteName = "LocalWaveSelectedFilesTests-\(UUID().uuidString)"
+        let preferences = UserDefaults(suiteName: suiteName)!
+        defer { preferences.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertFalse(LocalWaveSelectedFilesSource.includesOnlySelectedFiles(at: root, preferences: preferences))
+        LocalWaveSelectedFilesSource.add(["picked/video.mov", "picked/song.mp3"], at: root, preferences: preferences)
+        XCTAssertTrue(LocalWaveSelectedFilesSource.includesOnlySelectedFiles(at: root, preferences: preferences))
+        XCTAssertEqual(LocalWaveSelectedFilesSource.selectedRelativePaths(at: root, preferences: preferences), Set(["picked/video.mov", "picked/song.mp3"]))
+        LocalWaveSelectedFilesSource.add(["picked/another.mp4"], at: root, preferences: preferences)
+        XCTAssertEqual(LocalWaveSelectedFilesSource.selectedRelativePaths(at: root, preferences: preferences), Set(["picked/video.mov", "picked/song.mp3", "picked/another.mp4"]))
+    }
+
     func testRescanIndexesFileMetadataButCountsOnlyAudio() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let nested = folder.appendingPathComponent("Album", isDirectory: true)
